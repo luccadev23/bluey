@@ -1,8 +1,9 @@
 import AVFoundation
 import Foundation
 
-/// A live session with OpenAI's Realtime API, running on the phone. Once he's awake the mic is on the whole
-/// time, so everything you say becomes context, but he stays quiet until you hold the screen and ask.
+/// A live session with OpenAI's Realtime API or Gemini Live, running on the phone. With OpenAI the mic is on the
+/// whole time, so everything you say becomes context, but he stays quiet until you hold the screen and ask.
+/// With Gemini the voice detection is off: audio only goes up while you hold the screen.
 /// He never talks out loud: replies are text (speech bubbles on the Mac) with a little cartoon chirp here.
 /// Tools (look at the screen, point) run on the Mac.
 final class LiveVoice: NSObject, ObservableObject {
@@ -12,7 +13,8 @@ final class LiveVoice: NSObject, ObservableObject {
 
     static let model = "gpt-realtime-2.1"
 
-    /// Asks the Mac for a short-lived key. Calls back with nil on failure.
+    /// Asks the Mac for a short-lived key (OpenAI) or a JSON bundle with the token and setup (Gemini).
+    /// Calls back with nil on failure.
     var requestToken: ((@escaping (String?) -> Void) -> Void)?
     /// Runs a tool on the Mac: (name, JSON arguments) → (output text, optional JPEG base64).
     var runTool: ((String, String, @escaping (String, String?) -> Void) -> Void)?
@@ -51,7 +53,8 @@ final class LiveVoice: NSObject, ObservableObject {
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
     private var converter: AVAudioConverter?
-    private let wireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 24000, channels: 1, interleaved: true)!
+    /// 24 kHz up to OpenAI, 16 kHz up to Gemini.
+    private var wireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 24000, channels: 1, interleaved: true)!
     private let playFormat = AVAudioFormat(standardFormatWithSampleRate: 24000, channels: 1)!
     private var audioReady = false
 
@@ -66,6 +69,19 @@ final class LiveVoice: NSObject, ObservableObject {
     /// Turns that were questions (said while holding, or committed when you let go).
     private var askedItems: Set<String> = []
     private var awaitingQuestion = false
+
+    // Gemini Live
+    private var provider: VoiceProvider = .openai
+    private var geminiSetup: [String: Any] = [:]
+    /// The server accepted the setup; nothing may be sent before this.
+    private var geminiReady = false
+    /// Audio is going up as one question (between activityStart and activityEnd).
+    private var activityOpen = false
+    /// The last ~300 ms of mic audio, sent first when you press so the start of a word isn't clipped.
+    private var preroll: [Data] = []
+    private var geminiResumeHandle: String?
+    private var geminiTurnID: String?
+    private var geminiUserText = ""
 
     private func setState(_ new: State) {
         guard new != state else { return }
@@ -111,6 +127,12 @@ final class LiveVoice: NSObject, ObservableObject {
         if wasRunning { onSessionEnd?() }
         askedItems = []
         awaitingQuestion = false
+        geminiReady = false
+        activityOpen = false
+        preroll = []
+        geminiResumeHandle = nil
+        geminiTurnID = nil
+        geminiUserText = ""
         socket?.cancel(with: .normalClosure, reason: nil)
         socket = nil
         stopAudio()
@@ -128,7 +150,11 @@ final class LiveVoice: NSObject, ObservableObject {
     /// Says a quick hi (for checking the chirp volume).
     func sayHi() {
         guard socket != nil else { wake(); return }
-        send(["type": "response.create", "response": ["instructions": "Reply with a quick, cheerful hi in under eight words."]])
+        if provider == .gemini {
+            send(["realtimeInput": ["text": "Reply with a quick, cheerful hi in under eight words."]])
+        } else {
+            send(["type": "response.create", "response": ["instructions": "Reply with a quick, cheerful hi in under eight words."]])
+        }
     }
 
     // MARK: Hold to ask
@@ -140,6 +166,7 @@ final class LiveVoice: NSObject, ObservableObject {
         if state == .asleep { wake(); return }
         guard socket != nil else { return }
         if state == .listening || state == .speaking { setState(.asking) }
+        openActivity()
     }
 
     /// You let go: he answers (or does the thing) using everything he's heard as context.
@@ -154,6 +181,11 @@ final class LiveVoice: NSObject, ObservableObject {
         askWhenReady = false
         setState(.thinking)
         awaitingQuestion = true
+        if provider == .gemini {
+            // The mic keeps feeding the question for a moment, so the last word isn't cut off.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.closeActivity() }
+            return
+        }
         // Close off what you just said (it may still be mid-sentence) and ask for a reply.
         send(["type": "input_audio_buffer.commit"])
         send(["type": "response.create"])
@@ -161,22 +193,53 @@ final class LiveVoice: NSObject, ObservableObject {
 
     // MARK: Connection
 
-    private func connect(_ token: String) {
-        var request = URLRequest(url: URL(string: "wss://api.openai.com/v1/realtime?model=\(Self.model)")!)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    private func connect(_ payload: String) {
+        var request: URLRequest
+        var gemini: (token: String, setup: [String: Any])?
+        if payload.hasPrefix("{"),
+           let bundle = try? JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any],
+           bundle["provider"] as? String == "gemini",
+           let token = bundle["token"] as? String, let setup = bundle["setup"] as? [String: Any] {
+            gemini = (token, setup)
+            var parts = URLComponents(string: "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained")!
+            parts.queryItems = [URLQueryItem(name: "access_token", value: token)]
+            request = URLRequest(url: parts.url!)
+        } else {
+            request = URLRequest(url: URL(string: "wss://api.openai.com/v1/realtime?model=\(Self.model)")!)
+            request.setValue("Bearer \(payload)", forHTTPHeaderField: "Authorization")
+        }
+        provider = gemini == nil ? .openai : .gemini
+        wireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: provider == .gemini ? 16000 : 24000,
+                                   channels: 1, interleaved: true)!
+        geminiReady = false
+        activityOpen = false
         let socket = URLSession.shared.webSocketTask(with: request)
         self.socket = socket
         socket.resume()
         receive(on: socket)
+        if var setup = gemini?.setup {
+            if reconnecting, let handle = geminiResumeHandle {
+                setup["sessionResumption"] = ["handle": handle]
+            } else if reconnecting, let context = resumeContext?(), !context.isEmpty,
+                      var instruction = setup["systemInstruction"] as? [String: Any],
+                      var parts = instruction["parts"] as? [[String: Any]], let first = parts.first?["text"] as? String {
+                // No session to resume: remind him what was said by adding it to his instructions.
+                parts[0]["text"] = first + "\n\n(What the user said earlier in this session, from their notes. Background only.)\n" + context
+                instruction["parts"] = parts
+                setup["systemInstruction"] = instruction
+            }
+            geminiSetup = setup
+            send(["setup": setup])
+        }
         if reconnecting {
             // Same session, new connection: the mic and recording never stopped. Remind him what was said.
             reconnecting = false
-            if let context = resumeContext?(), !context.isEmpty {
+            if provider == .openai, let context = resumeContext?(), !context.isEmpty {
                 send(["type": "conversation.item.create",
                       "item": ["type": "message", "role": "user",
                                "content": [["type": "input_text", "text": "(Context: what I said earlier in this session, from my notes. Don't reply to this.)\n" + context]]]])
             }
-            if askWhenReady { ask() } else { setState(holding ? .asking : .listening) }
+            if askWhenReady, provider == .openai { ask() } else { setState(holding ? .asking : .listening) }
             return
         }
         do {
@@ -188,7 +251,7 @@ final class LiveVoice: NSObject, ObservableObject {
         }
         onSessionStart?()
         chirp(syllables: 2)
-        if askWhenReady {
+        if askWhenReady, provider == .openai {
             ask()
         } else {
             setState(holding ? .asking : .listening)
@@ -229,13 +292,20 @@ final class LiveVoice: NSObject, ObservableObject {
         socket.receive { [weak self] result in
             guard let self, socket === self.socket else { return }
             switch result {
-            case .success(.string(let text)):
-                if let data = text.data(using: .utf8),
-                   let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    DispatchQueue.main.async { self.handle(event) }
+            case .success(let message):
+                // OpenAI sends text frames; Gemini sends its JSON as binary frames.
+                let data: Data?
+                switch message {
+                case .string(let text): data = text.data(using: .utf8)
+                case .data(let bytes): data = bytes
+                @unknown default: data = nil
                 }
-                self.receive(on: socket)
-            case .success:
+                if let data, let event = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    DispatchQueue.main.async {
+                        guard socket === self.socket else { return }
+                        if self.provider == .gemini { self.handleGemini(event) } else { self.handle(event) }
+                    }
+                }
                 self.receive(on: socket)
             case .failure(let error):
                 NSLog("Googly realtime closed: \(error)")
@@ -310,10 +380,13 @@ final class LiveVoice: NSObject, ObservableObject {
         var remaining = calls.count
         toolsRunning += 1
         var images: [String] = []
+        var answers: [[String: Any]] = []
         for call in calls {
             let name = call["name"] as? String ?? ""
-            let callID = call["call_id"] as? String ?? ""
-            let arguments = call["arguments"] as? String ?? "{}"
+            let callID = (call["call_id"] ?? call["id"]) as? String ?? ""
+            var arguments = call["arguments"] as? String ?? "{}"
+            if let object = call["args"] as? [String: Any], let data = try? JSONSerialization.data(withJSONObject: object),
+               let text = String(data: data, encoding: .utf8) { arguments = text }
             if name == "go_to_sleep" { sleepAfterReply = true }
             let finish: (String, String?) -> Void = { [weak self] output, image in
                 DispatchQueue.main.async {
@@ -321,12 +394,25 @@ final class LiveVoice: NSObject, ObservableObject {
                     if name == "web_research", let range = output.range(of: "\n---REPORT---\n") {
                         self.onReport?(String(output[range.upperBound...]))
                     }
-                    self.send(["type": "conversation.item.create",
-                               "item": ["type": "function_call_output", "call_id": callID, "output": output]])
+                    if self.provider == .gemini {
+                        answers.append(["id": callID, "name": name, "response": ["result": output]])
+                    } else {
+                        self.send(["type": "conversation.item.create",
+                                   "item": ["type": "function_call_output", "call_id": callID, "output": output]])
+                    }
                     if let image { images.append(image) }
                     remaining -= 1
                     if remaining == 0 {
                         self.toolsRunning = max(0, self.toolsRunning - 1)
+                        if self.provider == .gemini {
+                            // Screenshots go in first as a picture, then all the answers together.
+                            for image in images {
+                                self.send(["realtimeInput": ["video": ["data": image, "mimeType": "image/jpeg"]]])
+                            }
+                            self.responseActive = true  // he carries on once he has the answers
+                            self.send(["toolResponse": ["functionResponses": answers]])
+                            return
+                        }
                         // Screenshots go in as a user image so he can actually see the screen.
                         for image in images {
                             self.send(["type": "conversation.item.create",
@@ -348,6 +434,97 @@ final class LiveVoice: NSObject, ObservableObject {
         guard pendingBuffers == 0, !responseActive, toolsRunning == 0 else { return }
         if sleepAfterReply { sleep(); return }
         if state == .speaking || state == .thinking { setState(holding ? .asking : .listening) }
+    }
+
+    // MARK: Gemini Live
+
+    private func sendGeminiAudio(_ data: Data) {
+        guard geminiReady else { return }
+        if activityOpen {
+            send(["realtimeInput": ["audio": ["data": data.base64EncodedString(), "mimeType": "audio/pcm;rate=16000"]]])
+        } else {
+            preroll.append(data)
+            if preroll.count > 6 { preroll.removeFirst(preroll.count - 6) }  // about 300 ms
+        }
+    }
+
+    /// You pressed the screen: tell Gemini a question starts, with the moment just before it.
+    private func openActivity() {
+        guard provider == .gemini, geminiReady, !activityOpen else { return }
+        activityOpen = true
+        geminiTurnID = UUID().uuidString
+        geminiUserText = ""
+        onUserTurn?(geminiTurnID!, true)
+        send(["realtimeInput": ["activityStart": [String: Any]()]])
+        for chunk in preroll {
+            send(["realtimeInput": ["audio": ["data": chunk.base64EncodedString(), "mimeType": "audio/pcm;rate=16000"]]])
+        }
+        preroll = []
+    }
+
+    /// You let go: the question is over, he answers.
+    private func closeActivity() {
+        guard provider == .gemini, activityOpen else { return }
+        activityOpen = false
+        send(["realtimeInput": ["activityEnd": [String: Any]()]])
+    }
+
+    /// What you said, as Gemini heard it, goes to the saved transcript once he starts answering.
+    private func flushUserWords() {
+        guard let id = geminiTurnID else { return }
+        geminiTurnID = nil
+        let text = geminiUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+        geminiUserText = ""
+        if !text.isEmpty { onUserWords?(id, text, true) }
+    }
+
+    private func handleGemini(_ event: [String: Any]) {
+        if event["setupComplete"] != nil {
+            geminiReady = true
+            if holding, state != .waking { openActivity() }
+            return
+        }
+        if let update = event["sessionResumptionUpdate"] as? [String: Any] {
+            if update["resumable"] as? Bool == true, let handle = update["newHandle"] as? String { geminiResumeHandle = handle }
+            return
+        }
+        if let call = event["toolCall"] as? [String: Any] {
+            flushUserWords()
+            responseActive = true
+            let calls = call["functionCalls"] as? [[String: Any]] ?? []
+            if !calls.isEmpty {
+                if state != .speaking { setState(.thinking) }
+                runTools(calls)
+            }
+            return
+        }
+        guard let content = event["serverContent"] as? [String: Any] else { return }
+        if let heard = (content["inputTranscription"] as? [String: Any])?["text"] as? String {
+            geminiUserText += heard
+        }
+        if let said = (content["outputTranscription"] as? [String: Any])?["text"] as? String {
+            flushUserWords()
+            responseActive = true
+            transcript += said
+            if !chirpedThisResponse, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                chirpedThisResponse = true
+                setState(.speaking)
+                chirp(syllables: min(max(transcript.split(separator: " ").count, 3), 5))
+            }
+            onCaption?(transcript, false)
+        }
+        // His voice comes back as audio; we only use the words, so it is dropped.
+        if content["turnComplete"] != nil {
+            flushUserWords()
+            responseActive = false
+            if !transcript.isEmpty {
+                onCaption?(transcript, true)
+                onReply?(transcript)
+            }
+            transcript = ""
+            chirpedThisResponse = false
+            finishIfQuiet()
+        }
     }
 
     // MARK: Audio
@@ -412,7 +589,11 @@ final class LiveVoice: NSObject, ObservableObject {
         guard error == nil, out.frameLength > 0, let samples = out.int16ChannelData?[0] else { return }
         let data = Data(bytes: samples, count: Int(out.frameLength) * 2)
         DispatchQueue.main.async {
-            self.send(["type": "input_audio_buffer.append", "audio": data.base64EncodedString()])
+            if self.provider == .gemini {
+                self.sendGeminiAudio(data)
+            } else {
+                self.send(["type": "input_audio_buffer.append", "audio": data.base64EncodedString()])
+            }
         }
     }
 

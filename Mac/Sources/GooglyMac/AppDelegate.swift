@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // ⌃⌥S stops him using the computer right away.
         HotKeys.shared.register(keyCode: kVK_ANSI_S) { [weak self] in self?.stopActions() }
 
-        if Keychain.get(.openai) == nil {
+        if Keychain.get(Keychain.Key(provider: settings.provider)) == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.editKeys() }
         }
     }
@@ -200,20 +200,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         restartIfAwake()
     }
 
-    @objc private func editKeys() {
+    /// Asks for the key of the provider picked in the menu.
+    @objc private func editKeys() { editKey(for: settings.provider) }
+
+    @objc private func editOpenAIKey() { editKey(for: .openai) }
+    @objc private func editGeminiKey() { editKey(for: .gemini) }
+
+    private func editKey(for provider: VoiceProvider) {
+        let slot = Keychain.Key(provider: provider)
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "OpenAI API Key"
+        alert.messageText = "\(provider.title) API Key"
         alert.informativeText = "Saved privately on this Mac (not in the project files). The phone only ever gets short-lived keys."
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
-        field.placeholderString = Keychain.get(.openai) == nil ? "sk-…" : "Key saved. Paste a new one to replace it."
+        field.placeholderString = Keychain.get(slot) == nil
+            ? (provider == .gemini ? "AIza…" : "sk-…")
+            : "Key saved. Paste a new one to replace it."
         alert.accessoryView = field
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
         alert.window.initialFirstResponder = field
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !key.isEmpty { Keychain.set(.openai, key) }
+        if !key.isEmpty { Keychain.set(slot, key) }
+    }
+
+    @objc private func setProvider(_ item: NSMenuItem) {
+        guard let raw = item.representedObject as? String, let provider = VoiceProvider(rawValue: raw),
+              provider != settings.provider else { return }
+        settings.provider = provider
+        if Keychain.get(Keychain.Key(provider: provider)) == nil { editKey(for: provider) }
+        restartIfAwake()  // the session has to reconnect to the other service
     }
 
     @objc private func setMood(_ item: NSMenuItem) {
@@ -285,7 +302,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(item("Open Meeting Notes", #selector(openNotes)))
         menu.addItem(item("Personality…", #selector(editPersonality)))
-        menu.addItem(item("OpenAI Key…", #selector(editKeys)))
+        let providerMenu = NSMenu()
+        for provider in VoiceProvider.allCases {
+            let p = item(provider.title, #selector(setProvider(_:)))
+            p.representedObject = provider.rawValue
+            p.state = settings.provider == provider ? .on : .off
+            providerMenu.addItem(p)
+        }
+        menu.addItem(submenu("Voice Provider", providerMenu))
+        menu.addItem(item("OpenAI Key…", #selector(editOpenAIKey)))
+        menu.addItem(item("Gemini Key…", #selector(editGeminiKey)))
         menu.addItem(.separator())
 
         let trailMenu = NSMenu()

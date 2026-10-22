@@ -47,6 +47,12 @@ final class Settings {
         set { defaults.set(newValue, forKey: "computerControl"); onChange?() }
     }
 
+    /// Which realtime service runs his voice session.
+    var provider: VoiceProvider {
+        get { VoiceProvider(rawValue: defaults.string(forKey: "provider") ?? "") ?? .openai }
+        set { defaults.set(newValue.rawValue, forKey: "provider"); onChange?() }
+    }
+
     /// How the cursor's path shows while it flies.
     var trail: PointerTrail {
         get { PointerTrail(rawValue: defaults.string(forKey: "trail") ?? "") ?? .comet }

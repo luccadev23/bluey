@@ -7,6 +7,7 @@ import GooglyShared
 @MainActor
 final class RealtimeHost {
     static let model = "gpt-realtime-2.1"
+    static let geminiModel = "gemini-3.8-live"
 
     private let overlay: CursorOverlay
     private let reports = ReportPanel()
@@ -216,6 +217,34 @@ final class RealtimeHost {
                  ["url": ["type": "string"]], required: ["url"]),
         ]
         return list
+    }
+
+    /// The same tools in Gemini's format: schema types in capitals, and no `parameters` for tools that take none.
+    static var geminiTools: [[String: Any]] {
+        let declarations = tools.map { tool -> [String: Any] in
+            var declaration: [String: Any] = ["name": tool["name"] ?? "", "description": tool["description"] ?? ""]
+            if let parameters = tool["parameters"] as? [String: Any],
+               let properties = parameters["properties"] as? [String: Any], !properties.isEmpty {
+                declaration["parameters"] = geminiSchema(parameters)
+            }
+            return declaration
+        }
+        return [["functionDeclarations": declarations]]
+    }
+
+    private static func geminiSchema(_ node: Any) -> Any {
+        guard let dict = node as? [String: Any] else { return node }
+        var out: [String: Any] = [:]
+        for (key, value) in dict {
+            if key == "type", let name = value as? String {
+                out[key] = name.uppercased()
+            } else if key == "required", let names = value as? [String], names.isEmpty {
+                continue
+            } else {
+                out[key] = geminiSchema(value)
+            }
+        }
+        return out
     }
 
     /// Separates his instructions from the report text, so the phone can save the report in the transcript.
@@ -583,11 +612,13 @@ final class RealtimeHost {
     // MARK: Token
 
     enum TokenError: LocalizedError {
-        case noKey, failed(String)
+        case noKey(VoiceProvider), failed(VoiceProvider, String)
         var errorDescription: String? {
             switch self {
-            case .noKey: return "I need an OpenAI API key. Add one under OpenAI Key in the menu bar."
-            case .failed(let why): return "OpenAI wouldn't start a voice session: \(why.prefix(160))"
+            case .noKey(let provider):
+                return "I need \(provider == .gemini ? "a" : "an") \(provider.title) API key. Add one under \(provider.title) Key in the menu bar."
+            case .failed(let provider, let why):
+                return "\(provider.title) wouldn't start a voice session: \(why.prefix(160))"
             }
         }
     }
@@ -609,12 +640,24 @@ final class RealtimeHost {
     }
 
     /// How he uses his tools. Always included, whatever the personality says.
-    static let toolGuide = """
+    static let hearingOpenAI = """
     How the conversation works: the user's microphone is on the whole time, so you overhear everything they say. \
     Treat all of that as background context and stay silent. You only reply when the app asks you to respond, which \
     happens when the user holds the phone screen to ask you something. Their most recent words are the question; \
     use the earlier talk as context.
+    """
 
+    /// With Gemini the phone only streams audio while the screen is held, so everything he hears is for him.
+    static let hearingGemini = """
+    How the conversation works: you only hear the user while they hold the phone screen to talk to you. Whatever \
+    you hear is a question or a request for you, so answer it. Earlier turns are context.
+    """
+
+    static func toolGuide(for provider: VoiceProvider) -> String {
+        (provider == .gemini ? hearingGemini : hearingOpenAI) + "\n\n" + toolRules
+    }
+
+    static let toolRules = """
     Most important rule: when a request needs a tool, call the tool FIRST with no words before it (the one \
     exception is web_research, described below). Never write \
     things like "one moment", "sure", "okay" or "let me". Reply only after, in one short line. No lists, no \
@@ -648,15 +691,15 @@ final class RealtimeHost {
     the user to type those. If something unexpected pops up, stop and tell the user.
     """
 
-    static var instructions: String {
-        personality + "\n\n" + toolGuide + (Settings.shared.computerControl ? "\n\n" + computerGuide : "")
+    static func instructions(for provider: VoiceProvider) -> String {
+        personality + "\n\n" + toolGuide(for: provider) + (Settings.shared.computerControl ? "\n\n" + computerGuide : "")
     }
 
     static var session: [String: Any] {
         [
             "type": "realtime",
             "model": model,
-            "instructions": instructions,
+            "instructions": instructions(for: .openai),
             // He never talks out loud: replies are text, shown as speech bubbles.
             "output_modalities": ["text"],
             "audio": [
@@ -675,9 +718,58 @@ final class RealtimeHost {
         ]
     }
 
-    /// A short-lived key for the phone, so the real key never leaves the Mac.
+    /// What the phone opens a Gemini Live session with. He only hears the screen-hold: automatic voice detection is
+    /// off and the phone marks the start and end of each question itself. Replies come back as audio, which the
+    /// phone drops; the bubble text is the transcription of it.
+    static func geminiSetup() -> [String: Any] {
+        [
+            "model": "models/\(geminiModel)",
+            "generationConfig": ["responseModalities": ["AUDIO"]],
+            "systemInstruction": ["parts": [["text": instructions(for: .gemini)]]],
+            "tools": geminiTools,
+            "realtimeInputConfig": ["automaticActivityDetection": ["disabled": true]],
+            "inputAudioTranscription": [String: Any](),
+            "outputAudioTranscription": [String: Any](),
+            "sessionResumption": [String: Any](),
+            "contextWindowCompression": ["slidingWindow": [String: Any]()],
+        ]
+    }
+
+    /// What the phone connects with: OpenAI's short-lived key as it is, or for Gemini a JSON bundle of its
+    /// short-lived token and the session setup.
     static func mintToken() async throws -> String {
-        guard let key = Keychain.get(.openai) else { throw TokenError.noKey }
+        switch Settings.shared.provider {
+        case .openai: return try await mintOpenAIToken()
+        case .gemini: return try await mintGeminiToken()
+        }
+    }
+
+    private static func mintGeminiToken() async throws -> String {
+        guard let key = Keychain.get(.gemini) else { throw TokenError.noKey(.gemini) }
+        let stamp = ISO8601DateFormatter()
+        var request = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/auth_tokens")!)
+        request.httpMethod = "POST"
+        request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "uses": 1,
+            "expireTime": stamp.string(from: Date().addingTimeInterval(30 * 60)),
+            "newSessionExpireTime": stamp.string(from: Date().addingTimeInterval(120)),
+        ])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard code == 200,
+              let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = json["name"] as? String else {
+            throw TokenError.failed(.gemini, "\(code) " + (String(data: data, encoding: .utf8) ?? ""))
+        }
+        let bundle: [String: Any] = ["provider": "gemini", "token": token, "setup": geminiSetup()]
+        return String(data: try JSONSerialization.data(withJSONObject: bundle), encoding: .utf8) ?? ""
+    }
+
+    /// A short-lived key for the phone, so the real key never leaves the Mac.
+    private static func mintOpenAIToken() async throws -> String {
+        guard let key = Keychain.get(.openai) else { throw TokenError.noKey(.openai) }
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/realtime/client_secrets")!)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
@@ -691,7 +783,7 @@ final class RealtimeHost {
         guard code == 200,
               let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let value = json["value"] as? String else {
-            throw TokenError.failed("\(code) " + (String(data: data, encoding: .utf8) ?? ""))
+            throw TokenError.failed(.openai, "\(code) " + (String(data: data, encoding: .utf8) ?? ""))
         }
         return value
     }

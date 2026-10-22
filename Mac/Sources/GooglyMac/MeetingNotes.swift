@@ -1,10 +1,12 @@
 import Foundation
+import GooglyShared
 
 /// Turns recorded audio into a proper transcript (with speaker labels) and keeps each session's
 /// meeting notes as plain files any agent can read: ~/Documents/Bluey Notes/<date> <id>/.
 enum MeetingNotes {
     static let model = "gpt-4o-transcribe-diarize"
     static let fallbackModel = "gpt-transcribe"
+    static let geminiModel = "gemini-3.5-transcribe"
 
     static var root: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -66,6 +68,9 @@ enum MeetingNotes {
         let audioURL = folder.appendingPathComponent("audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: audioURL, withIntermediateDirectories: true)
         try audio.write(to: audioURL.appendingPathComponent(String(format: "chunk-%03d.m4a", index)))
+        if Settings.shared.provider == .gemini {
+            return (try await geminiTranscript(audio), folder)
+        }
         do {
             return (try await diarized(audio), folder)
         } catch {
@@ -100,8 +105,46 @@ enum MeetingNotes {
         return text.isEmpty ? [] : [Segment(speaker: "?", start: 0, end: 0, text: text)]
     }
 
+    /// Gemini's transcribe model, asked for speaker turns as JSON. If it answers in plain text, that becomes one turn.
+    private static func geminiTranscript(_ audio: Data) async throws -> [Segment] {
+        guard let key = Keychain.get(.gemini) else { throw RealtimeHost.TokenError.noKey(.gemini) }
+        var request = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(geminiModel):generateContent")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let prompt = """
+        Transcribe this recording with speaker labels (A, B, …). Reply with only a JSON array of turns, in order: \
+        [{"speaker": "A", "start": <seconds from the start>, "text": "<what they said>"}]. No other text.
+        """
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "contents": [["role": "user", "parts": [
+                ["text": prompt],
+                ["inlineData": ["mimeType": "audio/mp4", "data": audio.base64EncodedString()]],
+            ]]],
+        ])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard code == 200, let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let content = ((json["candidates"] as? [[String: Any]])?.first)?["content"] as? [String: Any] else {
+            throw RealtimeHost.TokenError.failed(.gemini, "transcription \(code) " + (String(data: data, encoding: .utf8) ?? ""))
+        }
+        let text = ((content["parts"] as? [[String: Any]]) ?? []).compactMap { $0["text"] as? String }.joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let unfenced = text.replacingOccurrences(of: "```json", with: "").replacingOccurrences(of: "```", with: "")
+        if let turns = (try? JSONSerialization.jsonObject(with: Data(unfenced.utf8))) as? [[String: Any]] {
+            return turns.compactMap { turn in
+                let said = (turn["text"] as? String ?? "").trimmingCharacters(in: .whitespaces)
+                guard !said.isEmpty else { return nil }
+                let start = (turn["start"] as? Double) ?? Double(turn["start"] as? String ?? "") ?? 0
+                return Segment(speaker: turn["speaker"] as? String ?? "?", start: start, end: start, text: said)
+            }
+        }
+        return text.isEmpty ? [] : [Segment(speaker: "?", start: 0, end: 0, text: text)]
+    }
+
     private static func post(_ audio: Data, fields: [String: String]) async throws -> [String: Any] {
-        guard let key = Keychain.get(.openai) else { throw RealtimeHost.TokenError.noKey }
+        guard let key = Keychain.get(.openai) else { throw RealtimeHost.TokenError.noKey(.openai) }
         let boundary = "googly-\(UUID().uuidString)"
         var body = Data()
         for (name, value) in fields {
@@ -118,7 +161,7 @@ enum MeetingNotes {
         let (data, response) = try await URLSession.shared.upload(for: request, from: body)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200, let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw RealtimeHost.TokenError.failed("transcription \(code) " + (String(data: data, encoding: .utf8) ?? ""))
+            throw RealtimeHost.TokenError.failed(.openai, "transcription \(code) " + (String(data: data, encoding: .utf8) ?? ""))
         }
         return json
     }

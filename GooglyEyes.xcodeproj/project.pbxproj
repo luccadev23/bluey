@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -18,6 +18,7 @@
 		6FBD9F2B49D3FD5A78CC4EF1 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83073BF3A1F734ADC97138DF /* SessionStore.swift */; };
 		772A196648CCCC476A2E36F7 /* OFL-Fredoka.txt in Resources */ = {isa = PBXBuildFile; fileRef = 020C853B32D37028CE040148 /* OFL-Fredoka.txt */; };
 		9C57F9AFA362287C2B93142E /* IBMPlexMono-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 0EAD8A3C72D3899AD5CD2AA8 /* IBMPlexMono-Regular.ttf */; };
+		A1B2C3D4E5F60718293A4B5C /* VoiceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A60718293A4B5D /* VoiceProvider.swift */; };
 		A3D88EE98BFEE3386A2C66DF /* BlueyAppView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1510156B478E99D7C4446DCA /* BlueyAppView.swift */; };
 		C2D2BC58460F12FB0D562BB7 /* LiveVoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CD953582717D49F21FCD734 /* LiveVoice.swift */; };
 		C763037B3F88C28F89EB61F0 /* MacLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = B44C98F6A89143BA9C926480 /* MacLink.swift */; };
@@ -43,10 +44,11 @@
 		83073BF3A1F734ADC97138DF /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		AA3AAA80221D679C8EAAE925 /* FaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaceView.swift; sourceTree = "<group>"; };
 		AB333D12D3F4C506B3E49505 /* IBMPlexSans.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = IBMPlexSans.ttf; sourceTree = "<group>"; };
+		B1C2D3E4F5A60718293A4B5D /* VoiceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProvider.swift; sourceTree = "<group>"; };
 		B44C98F6A89143BA9C926480 /* MacLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacLink.swift; sourceTree = "<group>"; };
 		C95CBBB828E99EC09708E98E /* GooglyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GooglyApp.swift; sourceTree = "<group>"; };
 		D0EEE8F996B2F95804C1ECF8 /* Fredoka.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fredoka.ttf; sourceTree = "<group>"; };
-		E884B5117C895A0439FDFE12 /* GooglyEyes.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GooglyEyes.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E884B5117C895A0439FDFE12 /* Bluey.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bluey.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -75,7 +77,7 @@
 		554494C1002555E490E37EB6 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E884B5117C895A0439FDFE12 /* GooglyEyes.app */,
+				E884B5117C895A0439FDFE12 /* Bluey.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -102,6 +104,7 @@
 			isa = PBXGroup;
 			children = (
 				4F71F206238433A6F710528B /* GooglyLink.swift */,
+				B1C2D3E4F5A60718293A4B5D /* VoiceProvider.swift */,
 				4A31DC33ABF7869BDE4E0F6C /* Palette.swift */,
 				2F574059BA9C302B222352AA /* Fonts */,
 			);
@@ -126,7 +129,7 @@
 			packageProductDependencies = (
 			);
 			productName = GooglyEyes;
-			productReference = E884B5117C895A0439FDFE12 /* GooglyEyes.app */;
+			productReference = E884B5117C895A0439FDFE12 /* Bluey.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -139,7 +142,6 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					B9CA7ABB7F3F613763C3DF65 = {
-						DevelopmentTeam = NF73NSV867;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -154,7 +156,6 @@
 			);
 			mainGroup = 4F61868F579B512B69F537A4;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -190,6 +191,7 @@
 				EADE24E60818A63E82366B42 /* FaceView.swift in Sources */,
 				CD8A48CB04D56A4BEF47D6AB /* GooglyApp.swift in Sources */,
 				6E03A7EBF9AAFFE4AC87ADE4 /* GooglyLink.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* VoiceProvider.swift in Sources */,
 				C2D2BC58460F12FB0D562BB7 /* LiveVoice.swift in Sources */,
 				C763037B3F88C28F89EB61F0 /* MacLink.swift in Sources */,
 				68F797C6A1D3EC7A83674C2A /* PairingView.swift in Sources */,
@@ -331,14 +333,21 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = NF73NSV867;
+				DEVELOPMENT_TEAM = 852M2H87F2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iOS/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Bluey;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Bluey finds the Mac app on your Wi-Fi so the character can look where it points.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Talk to your blueberry. He listens while he's awake (double tap him to wake him up or put him to sleep).";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UIStatusBarHidden = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = co.visionairy.googly.phone;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.luccabonim.bluey.phone;
 				PRODUCT_NAME = Bluey;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -351,14 +360,21 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = NF73NSV867;
+				DEVELOPMENT_TEAM = 852M2H87F2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iOS/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Bluey;
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Bluey finds the Mac app on your Wi-Fi so the character can look where it points.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Talk to your blueberry. He listens while he's awake (double tap him to wake him up or put him to sleep).";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UIStatusBarHidden = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = co.visionairy.googly.phone;
+				PRODUCT_BUNDLE_IDENTIFIER = dev.luccabonim.bluey.phone;
 				PRODUCT_NAME = Bluey;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;

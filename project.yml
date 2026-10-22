@@ -1,6 +1,6 @@
 name: GooglyEyes
 options:
-  bundleIdPrefix: co.visionairy.googly
+  bundleIdPrefix: dev.luccabonim.bluey
   deploymentTarget:
     iOS: "17.0"
 settings:
@@ -17,7 +17,7 @@ targets:
       - path: Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: co.visionairy.googly.phone
+        PRODUCT_BUNDLE_IDENTIFIER: dev.luccabonim.bluey.phone
         PRODUCT_NAME: Bluey
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES

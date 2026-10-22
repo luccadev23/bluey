@@ -1,10 +1,15 @@
 import Foundation
+import GooglyShared
 
 /// API keys live in a private file in ~/Library/Application Support/Googly (readable only by you),
 /// never in the project folder or git. Unlike the Keychain, this never asks for your password.
 enum Keychain {
     enum Key: String {
-        case anthropic, elevenlabs, openai
+        case anthropic, elevenlabs, gemini, openai
+
+        init(provider: VoiceProvider) {
+            self = provider == .gemini ? .gemini : .openai
+        }
     }
 
     private static var cache: [String: String]?
