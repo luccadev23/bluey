@@ -1,80 +1,8 @@
 import Foundation
-
-/// One line in a session: the proper transcript (from the recorded audio, with speakers), the rough live
-/// transcript (until the proper one catches up), a question you asked by holding the screen, his replies
-/// and research reports.
-struct TranscriptEntry: Codable, Identifiable, Equatable {
-    enum Kind: String, Codable { case heard, asked, reply, report, transcript }
-
-    var id = UUID()
-    var kind: Kind
-    var text: String
-    var time: Date
-    /// The Realtime conversation item this came from, so its transcript can be filled in when it arrives.
-    var itemID: String?
-    /// Who was talking, for proper transcript lines ("A", "B", … within each five-minute chunk).
-    var speaker: String?
-}
-
-/// A recorded chunk waiting to be transcribed by the Mac.
-struct PendingChunk: Codable, Equatable {
-    var index: Int
-    var started: Date
-}
-
-/// Everything from one wake-to-sleep session.
-struct BlueySession: Codable, Identifiable, Equatable {
-    var id = UUID()
-    var started: Date
-    var ended: Date?
-    var entries: [TranscriptEntry] = []
-    /// Where the Mac saved this session's meeting notes.
-    var notesPath: String?
-    var pending: [PendingChunk]?
-
-    var questionCount: Int { entries.filter { $0.kind == .asked }.count }
-
-    /// A short line for the session list: the first thing you asked, or the first thing you said.
-    var summary: String {
-        let first = entries.first { $0.kind == .asked && !$0.text.isEmpty }
-            ?? displayEntries.first { $0.kind == .transcript || $0.kind == .heard }
-        return first?.text ?? "Nothing said yet"
-    }
-
-    var duration: TimeInterval { (ended ?? Date()).timeIntervalSince(started) }
-
-    /// What to show: the proper transcript where it exists, the rough live lines after it, plus
-    /// questions, replies and reports, in time order.
-    var displayEntries: [TranscriptEntry] {
-        let properUntil = entries.filter { $0.kind == .transcript }.map(\.time).max() ?? .distantPast
-        return entries
-            .filter { !$0.text.isEmpty && !($0.kind == .heard && $0.time <= properUntil) }
-            .sorted { $0.time < $1.time }
-    }
-
-    var transcribing: Int { pending?.count ?? 0 }
-
-    /// Plain text, for sharing.
-    var exportText: String {
-        let time = DateFormatter()
-        time.dateFormat = "h:mm:ss a"
-        var lines = ["Bluey session, \(started.formatted(date: .abbreviated, time: .shortened))", ""]
-        for entry in displayEntries {
-            let who: String
-            switch entry.kind {
-            case .transcript: who = "Speaker \(entry.speaker ?? "?")"
-            case .heard: who = "You"
-            case .asked: who = "You asked"
-            case .reply: who = "Bluey"
-            case .report: who = "Research"
-            }
-            lines.append("[\(time.string(from: entry.time))] \(who): \(entry.text)")
-        }
-        return lines.joined(separator: "\n")
-    }
-}
+import Combine
 
 /// Keeps every session on the phone, as one JSON file in the app's Documents folder.
+@MainActor
 final class SessionStore: ObservableObject {
     @Published private(set) var sessions: [BlueySession] = []  // newest first
     @Published private(set) var currentID: UUID?
@@ -97,9 +25,9 @@ final class SessionStore: ObservableObject {
 
     var current: BlueySession? { sessions.first { $0.id == currentID } }
 
-    func start() {
+    func start(id: UUID = UUID(), started: Date = Date()) {
         end()
-        let session = BlueySession(started: Date())
+        let session = BlueySession(id: id, started: started)
         sessions.insert(session, at: 0)
         currentID = session.id
         save()
@@ -109,7 +37,7 @@ final class SessionStore: ObservableObject {
         guard let id = currentID, let index = sessions.firstIndex(where: { $0.id == id }) else { return }
         currentID = nil
         let session = sessions[index]
-        if session.entries.allSatisfy({ $0.text.isEmpty }) && session.transcribing == 0
+        if session.entries.allSatisfy({ $0.text.isEmpty }) && (session.pending?.isEmpty ?? true)
             && Date().timeIntervalSince(session.started) < 20 {
             sessions.remove(at: index)  // a few seconds with nothing said: don't keep it
         } else {
@@ -153,28 +81,79 @@ final class SessionStore: ObservableObject {
         update { $0.entries.append(TranscriptEntry(kind: .report, text: text, time: Date())) }
     }
 
-    // MARK: Proper transcript (recorded audio, transcribed on the Mac)
+    /// A single source of truth, independent of the chosen conversation provider.
+    func localSpeech(session id: UUID, segment: SpeechSegment, started: Date) {
+        update(id) { session in
+            guard !session.entries.contains(where: { $0.id == segment.id }) else { return }
+            session.entries.append(TranscriptEntry(id: segment.id, kind: segment.questionID == nil ? .transcript : .asked,
+                text: segment.text, time: started.addingTimeInterval(segment.start), source: "apple",
+                questionID: segment.questionID, audioStart: segment.start, audioEnd: segment.end))
+        }
+    }
 
-    func addPending(_ session: UUID, index: Int, started: Date) {
+    // MARK: Audio archival and local recovery of older recordings
+
+    func addPending(_ session: UUID, index: Int, started: Date, needsRecovery: Bool = false) {
         update(session) { s in
             var list = s.pending ?? []
-            if !list.contains(where: { $0.index == index }) { list.append(PendingChunk(index: index, started: started)) }
+            if !list.contains(where: { $0.index == index }) {
+                list.append(PendingChunk(index: index, started: started, purpose: needsRecovery ? "localRecovery" : "archive"))
+            }
             s.pending = list
         }
     }
 
-    /// Adds a transcribed chunk: one line per speaker turn, at its real time.
-    func transcribed(_ session: UUID, index: Int, started: Date, segments: [(speaker: String, start: Double, text: String)]) {
+    func archived(_ session: UUID, index: Int) {
         update(session) { s in
-            s.pending?.removeAll { $0.index == index }
-            for segment in segments {
-                let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let i = s.pending?.firstIndex(where: { $0.index == index }) {
+                if s.pending?[i].purpose == "archive" { s.pending?.remove(at: i) }
+                else { s.pending?[i].archived = true }
+            }
+        }
+        save()  // Persist the archive acknowledgement before the caller removes the phone's file.
+    }
+
+    func needsLocalRecovery(_ session: UUID, index: Int) -> Bool {
+        sessions.first { $0.id == session }?.pending?.contains { $0.index == index && $0.purpose != "archive" } ?? false
+    }
+
+    func recoveryFailed(_ session: UUID, message: String) {
+        update(session) { $0.recoveryError = message }
+    }
+
+    /// Import old pending recordings using the same local recognizer, without inventing speakers.
+    func recovered(_ session: UUID, index: Int, started: Date, spans: [RecognizedSpeech]) {
+        update(session) { s in
+            guard let i = s.pending?.firstIndex(where: { $0.index == index && $0.purpose != "archive" }) else { return }
+            let recoveringLiveCapture = s.pending?[i].purpose == "localRecovery"
+            if s.pending?[i].archived == true { s.pending?.remove(at: i) }
+            else { s.pending?[i].purpose = "archive" }
+            s.recoveryError = nil
+            let offset = started.timeIntervalSince(s.started)
+            let recordedThrough = recoveringLiveCapture
+                ? (s.entries.filter { $0.source == "apple" }.compactMap(\.audioEnd).max() ?? -.infinity)
+                : -.infinity
+            var groups: [(start: Double, end: Double, text: String)] = []
+            for span in spans where offset + span.end > recordedThrough {
+                if let last = groups.indices.last, span.start - groups[last].end < 2, groups[last].text.count < 300 {
+                    groups[last].text += span.text
+                    groups[last].end = span.end
+                } else { groups.append((span.start, span.end, span.text)) }
+            }
+            for group in groups {
+                let text = group.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else { continue }
-                s.entries.append(TranscriptEntry(kind: .transcript, text: text,
-                                                 time: started.addingTimeInterval(segment.start), speaker: segment.speaker))
+                s.entries.append(TranscriptEntry(kind: .transcript, text: text, time: started.addingTimeInterval(group.start),
+                    source: "apple", audioStart: offset + group.start, audioEnd: offset + group.end))
             }
             s.entries.sort { $0.time < $1.time }
         }
+        save()
+    }
+
+    func syncFailed(_ ids: [UUID], retry: Bool = false) {
+        dirty.formUnion(ids)
+        if retry { scheduleSync() }
     }
 
     func setNotesPath(_ session: UUID, _ path: String) {
@@ -208,9 +187,10 @@ final class SessionStore: ObservableObject {
     }
 
     private func scheduleSync() {
-        syncWork?.cancel()
+        guard syncWork == nil else { return }
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            self.syncWork = nil
             let changed = self.sessions.filter { self.dirty.contains($0.id) }
             self.dirty = []
             if !changed.isEmpty { self.onSync?(changed) }
@@ -239,7 +219,7 @@ final class SessionStore: ObservableObject {
     }
 
     private func scheduleSave(sync: Bool = false) {
-        saveWork?.cancel()
+        guard saveWork == nil else { return }
         let work = DispatchWorkItem { [weak self] in self?.save() }
         saveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
@@ -247,6 +227,7 @@ final class SessionStore: ObservableObject {
 
     private func save() {
         saveWork?.cancel()
+        saveWork = nil
         guard let data = try? JSONEncoder().encode(sessions) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }

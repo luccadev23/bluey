@@ -26,6 +26,11 @@
 		EADE24E60818A63E82366B42 /* FaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA3AAA80221D679C8EAAE925 /* FaceView.swift */; };
 		FC47A19572BFD9F2386A85D3 /* IBMPlexSans.ttf in Resources */ = {isa = PBXBuildFile; fileRef = AB333D12D3F4C506B3E49505 /* IBMPlexSans.ttf */; };
 		FF7676A8F229F874417F4451 /* SoundButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65620B4F67CBB8E8821EBAC8 /* SoundButton.swift */; };
+		700A958E1A695AF619EBCBC2 /* TextConversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6D3108D51D1DAC87A6F06FF /* TextConversation.swift */; };
+		30CE4BF20A3175EB15E11228 /* SpeechTranscript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53E143BBD3745B8FE5F2EC7F /* SpeechTranscript.swift */; };
+		72E5511F0BBEF42D2FEB4195 /* LocalSpeechRecognition.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACE36BE12271DCF6480B74D9 /* LocalSpeechRecognition.swift */; };
+		513859432964FC6EBB994E1A /* SpeechSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA43F3C9252D98D792FC2E67 /* SpeechSession.swift */; };
+		E86AAA6E520A55378AD69CBB /* SessionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73F8861D86741DBA2E31C3D /* SessionModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -49,6 +54,11 @@
 		C95CBBB828E99EC09708E98E /* GooglyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GooglyApp.swift; sourceTree = "<group>"; };
 		D0EEE8F996B2F95804C1ECF8 /* Fredoka.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = Fredoka.ttf; sourceTree = "<group>"; };
 		E884B5117C895A0439FDFE12 /* Bluey.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Bluey.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D6D3108D51D1DAC87A6F06FF /* TextConversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextConversation.swift; sourceTree = "<group>"; };
+		53E143BBD3745B8FE5F2EC7F /* SpeechTranscript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechTranscript.swift; sourceTree = "<group>"; };
+		ACE36BE12271DCF6480B74D9 /* LocalSpeechRecognition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSpeechRecognition.swift; sourceTree = "<group>"; };
+		AA43F3C9252D98D792FC2E67 /* SpeechSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechSession.swift; sourceTree = "<group>"; };
+		B73F8861D86741DBA2E31C3D /* SessionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -85,6 +95,8 @@
 		8F41397BC1AEAB53CDE84BB3 /* Sources */ = {
 			isa = PBXGroup;
 			children = (
+				AA43F3C9252D98D792FC2E67 /* SpeechSession.swift */,
+				ACE36BE12271DCF6480B74D9 /* LocalSpeechRecognition.swift */,
 				35F3C44C342D6E869E6E3B4E /* BlobShape.swift */,
 				1510156B478E99D7C4446DCA /* BlueyAppView.swift */,
 				7ED2232FD362786D7A5D38B8 /* ChunkRecorder.swift */,
@@ -103,6 +115,9 @@
 		E8E2F33C9E110392983FDDDF /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				B73F8861D86741DBA2E31C3D /* SessionModels.swift */,
+				53E143BBD3745B8FE5F2EC7F /* SpeechTranscript.swift */,
+				D6D3108D51D1DAC87A6F06FF /* TextConversation.swift */,
 				4F71F206238433A6F710528B /* GooglyLink.swift */,
 				B1C2D3E4F5A60718293A4B5D /* VoiceProvider.swift */,
 				4A31DC33ABF7869BDE4E0F6C /* Palette.swift */,
@@ -185,6 +200,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E86AAA6E520A55378AD69CBB /* SessionModels.swift in Sources */,
+				513859432964FC6EBB994E1A /* SpeechSession.swift in Sources */,
+				72E5511F0BBEF42D2FEB4195 /* LocalSpeechRecognition.swift in Sources */,
+				30CE4BF20A3175EB15E11228 /* SpeechTranscript.swift in Sources */,
+				700A958E1A695AF619EBCBC2 /* TextConversation.swift in Sources */,
 				162BD56C1F6191020071D2A2 /* BlobShape.swift in Sources */,
 				A3D88EE98BFEE3386A2C66DF /* BlueyAppView.swift in Sources */,
 				6F0FE87629E2A7A20676322C /* ChunkRecorder.swift in Sources */,

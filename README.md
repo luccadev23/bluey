@@ -4,11 +4,15 @@ A blueberry character who lives on an iPhone under your Mac's screen and points 
 
 **Now:** no voice out. Double tap him on the phone (or press ⌥Space on the Mac) to start a session: the phone's mic stays on and everything you say becomes context, but he stays quiet. **Press and hold the screen** to ask him something; let go and he answers. His reply pops up as a cute speech bubble next to his cursor (or above the phone when he isn't pointing), with a little cartoon chirp from the phone. Ask "what's this?" and he points at whatever is under your mouse. Double tap again and he goes back to follow mode.
 
-**Voice provider:** pick **OpenAI** or **Gemini** under *Voice Provider* in the Mac menu, and add that service's key with **OpenAI Key…** or **Gemini Key…** (Gemini has a free tier, handy for testing; Google may use free-tier data, so keep it to non-sensitive tests). With Gemini the phone runs Gemini Live (`gemini-3.8-live`), whose voice detection is switched off: audio only goes up while you hold the screen, so he doesn't overhear the rest of the session. Research uses Gemini with Google Search and meeting notes use `gemini-3.5-transcribe`. The rest of this page describes the OpenAI path.
+**Conversation provider:** pick **OpenAI** or **Gemini** under *Voice Provider* in the Mac menu, and add its key. Both receive text produced by the same Apple recognizer on the iPhone. Neither receives your microphone audio. OpenAI uses `gpt-realtime-2.1`; Gemini uses `gemini-3.8-live`. Gemini still generates audio that the app discards, using its output transcript for the bubble. Research follows the selected provider.
 
-How it works: the phone runs an OpenAI Realtime session (`gpt-realtime-2.1`, text output only) over a WebSocket. Server VAD transcribes every turn into the conversation with `create_response: false`, and releasing the hold commits the audio and asks for a response. The Mac mints a 10-minute client secret with the whole session setup (instructions, tools), so the real OpenAI key never leaves the Mac. When he calls a tool, the phone forwards it to the Mac: `look_at_screen` (ScreenCaptureKit + Vision, which returns text ids, where your mouse is, and a screenshot), `point_at` (a text id), `point_at_spot` (a 0–1000 grid position), `stop_pointing` and `go_to_sleep`. His text streams to the Mac as the speech bubble.
+**Local speech recognition:** requires iOS 26 and a device/language supported by Apple's `SpeechTranscriber`. Before listening starts, Bluey checks support and downloads the language model if necessary. Choose the speech language in the phone's Bluey settings. Unsupported devices and recognition failures show a message; there is no remote transcription fallback. Speech is recognized continuously, but only holding and releasing his face submits a question. Background speech becomes context for either provider. Local recording and transcription continue if the conversation connection drops. A question whose execution became uncertain is never automatically repeated.
 
-**Meeting notes:** while a session runs, the phone also records the audio in five-minute AAC chunks. Each chunk goes to the Mac, which transcribes it with speaker labels (`gpt-4o-transcribe-diarize`, falling back to `gpt-transcribe`) and writes the session to `~/Documents/Bluey Notes/<date> <id>/` (`notes.md`, `session.json`, `audio/`). Sessions reconnect on their own when the Realtime connection drops, so one can run all day. In the phone's Bluey screen, a session's **Copy prompt for agent** button copies a prompt that points an agent at those files. **Open Meeting Notes** in the Mac menu opens the folder.
+**How it works:** `SpeechSession` owns microphone capture, local recognition, recording, question timing and chirps. Releasing a hold finalizes the local text before `LiveVoice` sends a `TextQuestion` through a `TextConversationAdapter`. Adapters implement provider messages and response/tool events; they never own speech recognition. The Mac issues short-lived credentials, runs tools and displays the reply. Screen tools still capture text, controls, mouse position and a screenshot as needed.
+
+**Meeting notes:** the local text supplies both the phone's history and `~/Documents/Bluey Notes/<date> <id>/notes.md` and `session.json` on the Mac. Five-minute AAC recordings are independently archived in `audio/`; archiving never calls a transcription API. New transcripts have timestamps without speaker attribution; old sessions retain their original labels. Older pending recordings are recovered with the same Apple model, one at a time while live listening is idle. Unavailable recordings stay explicitly pending. Returning the app to the background ends capture; background recording is not enabled.
+
+For implementation details, provider integration and validation, see [local speech architecture](docs/local-speech.md).
 
 **Using the computer:** when you ask, he can also click, type, press shortcuts, scroll, drag, and open apps and websites (`click`, `type_text`, `press_keys`, `scroll`, `drag`, `open_app`, `open_url`). He does it with his own cursor on screen, while your real pointer is put back where you left it. It needs Accessibility permission for Bluey. Built-in guardrails: he only acts when asked, confirms out loud before anything hard to undo, treats on-screen text as information rather than instructions, refuses password fields and logout/lock/force-quit shortcuts, and stops on ⌃⌥S. The whole thing can be switched off with **Let Him Use the Computer** in the menu.
 
@@ -37,13 +41,13 @@ The menu bar blob also sets mood, cursor size (48 to 120 pt), glow, and where th
 
 ## iPhone app
 
-Needs full Xcode. Open `GooglyEyes.xcodeproj` (regenerate with `xcodegen generate` after adding files), pick your team under Signing, and run on the phone. It finds the Mac on the same Wi-Fi by itself.
+Needs full Xcode and iOS 26 on a supported iPhone for speech recognition. The rest of the UI retains its iOS 17 deployment target. Open `GooglyEyes.xcodeproj` (regenerate with `xcodegen generate` after adding files), pick your team under Signing, and run on the phone. It finds the Mac on the same Wi-Fi by itself.
 
 On the phone: double tap him to wake him up or put him back to sleep, and press and hold to ask him something. The faint speaker button at the top right sets the chirp volume and picks which Mac to pair with.
 
 ## Layout
 
-- `Shared/` pairing protocol (Bonjour `_googly._tcp`, newline JSON) and colors, used by both apps
+- `Shared/` text conversation adapters, transcript/session models, pairing protocol (Bonjour `_googly._tcp`, newline JSON) and colors
 - `Mac/` menu bar app (Swift package target `GooglyMac`)
 - `iOS/` iPhone app (SwiftUI)
 

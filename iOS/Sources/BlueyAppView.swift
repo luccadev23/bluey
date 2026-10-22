@@ -8,6 +8,7 @@ struct BlueyAppView: View {
     @ObservedObject var link: MacLink
     var onClose: () -> Void
     @State private var volume = 1.0
+    @AppStorage("speechLocale") private var speechLocale = ""
 
     var body: some View {
         NavigationStack {
@@ -73,8 +74,6 @@ struct BlueyAppView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .disabled(!link.connected && live.state == .asleep)
-                .opacity(!link.connected && live.state == .asleep ? 0.5 : 1)
 
                 Text(live.state == .asleep
                      ? "He listens the whole session. Hold his face to ask something, let go and he answers."
@@ -83,6 +82,24 @@ struct BlueyAppView: View {
                     .foregroundStyle(Color(hex: Palette.inkSoft))
 
                 Divider().overlay(Color.white.opacity(0.08))
+
+                VStack(alignment: .leading, spacing: 8) {
+                    label("Speech language")
+                    Picker("Speech language", selection: $speechLocale) {
+                        Text("Device language").tag("")
+                        Text("Português (Brasil)").tag("pt-BR")
+                        Text("English (US)").tag("en-US")
+                        Text("English (UK)").tag("en-GB")
+                    }
+                    .disabled(live.state != .asleep)
+                    Text("Speech is transcribed on your iPhone. Requires iOS 26 and a supported device and language.")
+                        .font(.plexSans(12))
+                        .foregroundStyle(Color(hex: Palette.inkSoft))
+                }
+
+                if let message = live.statusMessage {
+                    Text(message).font(.plexSans(12)).foregroundStyle(.white)
+                }
 
                 VStack(alignment: .leading, spacing: 8) {
                     label("Chirp volume")
@@ -245,7 +262,7 @@ struct SessionDetailView: View {
         I recorded a meeting with my Bluey app on \(session.started.formatted(date: .complete, time: .shortened)). \
         The notes are on my Mac in \(path)
 
-        - notes.md: the full transcript with timestamps and speaker labels (A, B, … per five-minute chunk), plus \
+        - notes.md: the local transcript with timestamps (older sessions may retain speaker labels), plus \
         my questions to Bluey, its replies and research reports. Start here.
         - session.json: the same data, structured.
         - audio/: the original recording in five-minute chunks.
@@ -279,9 +296,13 @@ struct SessionDetailView: View {
                         .foregroundStyle(.white)
                     if let session {
                         Text("\(SessionRow.duration(session.duration)) · \(session.questionCount) asked"
-                             + (session.transcribing > 0 ? " · transcribing \(session.transcribing) chunk\(session.transcribing == 1 ? "" : "s")…" : ""))
+                             + (session.transcribing > 0 ? " · \(session.transcribing) recordings await local recovery" : "")
+                             + (session.archiving > 0 ? " · saving \(session.archiving) recordings" : ""))
                             .font(.plexMono(11))
                             .foregroundStyle(Color(hex: Palette.inkSoft))
+                        if let error = session.recoveryError {
+                            Text(error).font(.plexSans(12)).foregroundStyle(.orange)
+                        }
                     }
                 }
                 Spacer()
@@ -344,7 +365,7 @@ private struct EntryView: View {
         switch entry.kind {
         case .transcript:
             HStack(alignment: .top, spacing: 10) {
-                Text(entry.speaker.map { "Speaker \($0)" } ?? "Speaker")
+                Text(entry.speaker.map { "Speaker \($0)" } ?? "Speech")
                     .font(.plexMono(11).weight(.medium))
                     .foregroundStyle(Self.speakerColor(entry.speaker))
                     .frame(width: 78, alignment: .leading)

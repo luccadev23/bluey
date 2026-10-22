@@ -32,6 +32,18 @@ struct RootView: View {
 
             ModeIndicator(state: live.state)
 
+            if let message = live.statusMessage {
+                Text(message)
+                    .font(.plexSans(14))
+                    .foregroundStyle(.white)
+                    .padding(12)
+                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+                    .padding(.horizontal, 80)
+                    .padding(.bottom, 18)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .allowsHitTesting(false)
+            }
+
             SoundButton(link: link, live: live)
 
             // Bluey's app: sessions, transcripts and settings.
@@ -69,11 +81,13 @@ struct RootView: View {
             if connected {
                 withAnimation(.easeOut(duration: 0.4)) { showPairing = false }
                 NotesSync.retryPending(store: store, link: link)
+                if live.state == .asleep { NotesSync.recoverPending(store: store, link: link) }
                 store.resyncRecent()
             }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { link.start() } else if phase == .background { link.stop() }
+            if phase == .active { link.start() }
+            else if phase == .background { live.sleep(); link.stop() }
         }
     }
 
@@ -111,23 +125,25 @@ struct RootView: View {
             link.request(Packet(command: "realtimeToken")) { reply in done(reply?.text) }
         }
         live.runTool = { [link] name, arguments, done in
-            link.request(Packet(command: "tool", tool: name, text: arguments)) { reply in
+            link.request(Packet(command: "tool", tool: name, text: arguments), timeout: 300) { reply in
                 done(reply?.text ?? "The Mac didn't answer.", reply?.image)
             }
         }
-        live.onSessionStart = { [store, live] in
-            store.start()
-            if let id = store.currentID { live.recorder.start(session: id) }
+        live.onSessionStart = { [store] id, started in
+            store.start(id: id, started: started)
         }
         live.resumeContext = { [store] in store.recentText() }
         live.recorder.onChunk = { [store, link] chunk in
-            store.addPending(chunk.sessionID, index: chunk.index, started: chunk.started)
+            store.addPending(chunk.sessionID, index: chunk.index, started: chunk.started,
+                             needsRecovery: chunk.needsLocalRecovery)
             NotesSync.upload(chunk.sessionID, index: chunk.index, started: chunk.started, store: store, link: link)
         }
         store.onSync = { [store, link] sessions in NotesSync.send(sessions, store: store, link: link) }
-        live.onSessionEnd = { [store] in store.end() }
-        live.onUserTurn = { [store] item, asked in store.placeholder(itemID: item, asked: asked) }
-        live.onUserWords = { [store] item, text, asked in store.heard(itemID: item, text: text, asked: asked) }
+        live.onSessionEnd = { [store, link] in
+            store.end()
+            NotesSync.recoverPending(store: store, link: link)
+        }
+        live.onLocalSpeech = { [store] id, segment, started in store.localSpeech(session: id, segment: segment, started: started) }
         live.onReply = { [store] text in store.reply(text) }
         live.onReport = { [store] text in store.report(text) }
         live.onCaption = { [link] text, finished in
