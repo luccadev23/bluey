@@ -10,11 +10,13 @@ let package = Package(
     ],
     targets: [
         .target(name: "GooglyShared", path: "Shared", exclude: ["Fonts"]),
+        .target(name: "BlueyWebSearch", dependencies: ["GooglyShared"], path: "Mac/Sources/WebSearch"),
         .executableTarget(
             name: "GooglyMac",
-            dependencies: ["GooglyShared"],
+            dependencies: ["GooglyShared", "BlueyWebSearch"],
             path: "Mac/Sources/GooglyMac"
         ),
         .testTarget(name: "GooglySharedTests", dependencies: ["GooglyShared"], path: "Tests/GooglySharedTests"),
+        .testTarget(name: "BlueyWebSearchTests", dependencies: ["BlueyWebSearch", "GooglyShared"], path: "Tests/BlueyWebSearchTests"),
     ]
 )

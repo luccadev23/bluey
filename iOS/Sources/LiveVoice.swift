@@ -339,14 +339,25 @@ final class LiveVoice: NSObject, ObservableObject {
                 guard self.socket === socket else { return }
                 NSLog("Bluey: tool request started")
                 if call.name == "go_to_sleep" { self.sleepAfterReply = true }
+                var arguments = call.arguments
+                if call.name == "web_research",
+                   var object = (try? JSONSerialization.jsonObject(with: Data(arguments.utf8))) as? [String: Any] {
+                    // The brain may translate the search question. Keep the response in the user's language.
+                    if (object["language"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                        object["language"] = SpeechSession.locale.identifier
+                    }
+                    if let data = try? JSONSerialization.data(withJSONObject: object) {
+                        arguments = String(decoding: data, as: UTF8.self)
+                    }
+                }
                 let result: (String, String?) = await withCheckedContinuation { continuation in
                     if let runTool = self.runTool {
-                        runTool(call.name, call.arguments) { continuation.resume(returning: ($0, $1)) }
+                        runTool(call.name, arguments) { continuation.resume(returning: ($0, $1)) }
                     } else { continuation.resume(returning: ("The Mac is not connected.", nil)) }
                 }
                 guard self.socket === socket else { return }
-                if call.name == "web_research", let range = result.0.range(of: "\n---REPORT---\n") {
-                    self.onReport?(String(result.0[range.upperBound...]))
+                if call.name == "web_research", let report = WebSearchResult.reportText(from: result.0) {
+                    self.onReport?(report)
                 }
                 results.append(ConversationToolResult(call: call, text: result.0, image: result.1))
             }

@@ -17,13 +17,16 @@ final class ReportPanel {
         show()
     }
 
-    func show(_ report: ResearchReport) {
-        model.report = report
-        model.error = nil
+    func show(_ report: WebSearchResult) {
+        model.question = report.question
+        model.report = report.error == nil ? report : nil
+        model.error = report.error?.message
+        model.expanded = false
         show()
     }
 
     func showError(_ message: String) {
+        model.report = nil
         model.error = message
         show()
     }
@@ -78,12 +81,17 @@ final class ReportPanel {
         let height: CGFloat
         if model.expanded, let report = model.report {
             // Roughly fit the text (about 58 characters a line), up to most of the screen; it scrolls past that.
-            let lines = report.paragraphs.reduce(0) { $0 + Int(ceil(Double($1.count) / 58)) }
-            let content = CGFloat(lines) * 21 + CGFloat(report.paragraphs.count) * 12
+            let lines = report.displayParagraphs.reduce(0) { $0 + Int(ceil(Double($1.count) / 58)) }
+            let content = CGFloat(lines) * 21 + CGFloat(report.displayParagraphs.count) * 12
                 + (report.sources.isEmpty ? 0 : 30 + CGFloat(report.sources.count) * 22)
             height = min(visible.height * 0.75, 110 + content)
         } else {
-            height = model.report == nil ? 140 : 190
+            if let error = model.error {
+                let lines = ceil(Double(error.count) / 44)
+                height = max(140, min(320, 84 + CGFloat(lines) * 21))
+            } else {
+                height = model.report == nil ? 140 : 190
+            }
         }
         let frame = NSRect(x: visible.maxX - width - 24, y: visible.maxY - height - 24, width: width, height: height)
         panel.setFrame(frame, display: true, animate: animated)
@@ -92,7 +100,7 @@ final class ReportPanel {
 
 final class ReportModel: ObservableObject {
     @Published var question = ""
-    @Published var report: ResearchReport?
+    @Published var report: WebSearchResult?
     @Published var error: String?
     @Published var expanded = false
 }
@@ -113,7 +121,7 @@ private struct ReportCard: View {
                 if model.expanded {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
-                            ForEach(Array(report.paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                            ForEach(Array(report.displayParagraphs.enumerated()), id: \.offset) { _, paragraph in
                                 Text(paragraph)
                                     .font(.custom("IBM Plex Sans", size: 15))
                                     .foregroundStyle(ink)
@@ -137,7 +145,7 @@ private struct ReportCard: View {
                         .padding(.trailing, 6)
                     }
                 } else {
-                    Text(report.paragraphs.joined(separator: " "))
+                    Text(report.displayParagraphs.joined(separator: " "))
                         .font(.custom("IBM Plex Sans", size: 14))
                         .foregroundStyle(ink)
                         .lineLimit(3)

@@ -53,6 +53,15 @@ final class Settings {
         set { defaults.set(newValue.rawValue, forKey: "provider"); onChange?() }
     }
 
+    /// Independent of conversation. Missing selection means disabled, including on upgrade.
+    var webSearchProvider: String? {
+        get { defaults.string(forKey: "webSearchProvider") }
+        set {
+            if let newValue { defaults.set(newValue, forKey: "webSearchProvider") }
+            else { defaults.removeObject(forKey: "webSearchProvider") }
+        }
+    }
+
     /// How the cursor's path shows while it flies.
     var trail: PointerTrail {
         get { PointerTrail(rawValue: defaults.string(forKey: "trail") ?? "") ?? .comet }

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F0412D61419A4D0C96DB4C01 /* WebSearchResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0412D61419A4D0C96DB4C02 /* WebSearchResult.swift */; };
 		0E02B38E4A5A909A93BA31C5 /* OFL-IBMPlex.txt in Resources */ = {isa = PBXBuildFile; fileRef = 1249C703A2D40793CA70D00E /* OFL-IBMPlex.txt */; };
 		0F5614BE9A55A8498E40F5F1 /* IBMPlexMono-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1C8AB3F441CA03CDA07FAE72 /* IBMPlexMono-Medium.ttf */; };
 		162BD56C1F6191020071D2A2 /* BlobShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35F3C44C342D6E869E6E3B4E /* BlobShape.swift */; };
@@ -34,6 +35,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		F0412D61419A4D0C96DB4C02 /* WebSearchResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchResult.swift; sourceTree = "<group>"; };
 		020C853B32D37028CE040148 /* OFL-Fredoka.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-Fredoka.txt"; sourceTree = "<group>"; };
 		0EAD8A3C72D3899AD5CD2AA8 /* IBMPlexMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexMono-Regular.ttf"; sourceTree = "<group>"; };
 		1249C703A2D40793CA70D00E /* OFL-IBMPlex.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "OFL-IBMPlex.txt"; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 		E8E2F33C9E110392983FDDDF /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				F0412D61419A4D0C96DB4C02 /* WebSearchResult.swift */,
 				B73F8861D86741DBA2E31C3D /* SessionModels.swift */,
 				53E143BBD3745B8FE5F2EC7F /* SpeechTranscript.swift */,
 				D6D3108D51D1DAC87A6F06FF /* TextConversation.swift */,
@@ -200,6 +203,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0412D61419A4D0C96DB4C01 /* WebSearchResult.swift in Sources */,
 				E86AAA6E520A55378AD69CBB /* SessionModels.swift in Sources */,
 				513859432964FC6EBB994E1A /* SpeechSession.swift in Sources */,
 				72E5511F0BBEF42D2FEB4195 /* LocalSpeechRecognition.swift in Sources */,

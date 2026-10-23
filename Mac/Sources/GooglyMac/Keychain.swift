@@ -5,7 +5,7 @@ import GooglyShared
 /// never in the project folder or git. Unlike the Keychain, this never asks for your password.
 enum Keychain {
     enum Key: String {
-        case anthropic, elevenlabs, gemini, openai
+        case anthropic, elevenlabs, gemini, openai, exa
 
         init(provider: VoiceProvider) {
             self = provider == .gemini ? .gemini : .openai

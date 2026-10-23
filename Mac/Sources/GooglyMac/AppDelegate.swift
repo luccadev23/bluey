@@ -222,6 +222,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         restartIfAwake()  // the session has to reconnect to the other service
     }
 
+    @objc private func disableWebSearch() { settings.webSearchProvider = nil }
+
+    @objc private func selectWebSearch(_ item: NSMenuItem) {
+        guard let id = item.representedObject as? String,
+              let provider = WebResearch.service.availableProviders.first(where: { $0.id == id }) else { return }
+        settings.webSearchProvider = provider.id
+        let slot = WebResearch.credentialSlot(for: provider)
+        let hasKey = Keychain.get(slot) != nil
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "\(provider.title) API Key"
+        alert.informativeText = "Saved privately on this Mac. Web Search is configured separately from your conversation provider."
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        field.placeholderString = hasKey ? "Key saved. Paste a new one to replace it." : "Paste your API key"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+        if hasKey { alert.addButton(withTitle: "Remove Key") }
+        alert.window.initialFirstResponder = field
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            let key = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty { Keychain.set(slot, key) }
+        case .alertThirdButtonReturn: Keychain.set(slot, nil)
+        default: break
+        }
+    }
+
     @objc private func setMood(_ item: NSMenuItem) {
         if let mood = item.representedObject as? String, let m = Mood(rawValue: mood) { settings.mood = m }
     }
@@ -301,6 +329,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(submenu("Voice Provider", providerMenu))
         menu.addItem(item("OpenAI Key…", #selector(editOpenAIKey)))
         menu.addItem(item("Gemini Key…", #selector(editGeminiKey)))
+        let searchMenu = NSMenu()
+        let disabled = item("Disabled", #selector(disableWebSearch))
+        disabled.state = settings.webSearchProvider == nil ? .on : .off
+        searchMenu.addItem(disabled)
+        let searchProviders = WebResearch.service.availableProviders
+        if searchProviders.isEmpty {
+            let empty = NSMenuItem(title: "No providers available", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            searchMenu.addItem(empty)
+        }
+        for provider in searchProviders {
+            let hasKey = Keychain.get(WebResearch.credentialSlot(for: provider)) != nil
+            let search = item(provider.title + (hasKey ? "" : " — API key required"), #selector(selectWebSearch(_:)))
+            search.representedObject = provider.id
+            search.state = settings.webSearchProvider == provider.id ? .on : .off
+            searchMenu.addItem(search)
+        }
+        menu.addItem(submenu("Web Search", searchMenu))
         menu.addItem(.separator())
 
         let trailMenu = NSMenu()

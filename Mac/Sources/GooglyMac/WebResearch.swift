@@ -1,131 +1,34 @@
 import Foundation
 import GooglyShared
+import BlueyWebSearch
+import OSLog
 
-/// A short researched answer: a title, up to four paragraphs, and where it came from.
-struct ResearchReport {
-    var question: String
-    var title: String
-    var paragraphs: [String]
-    var sources: [(title: String, url: URL)]
-
-    /// Plain text, for him (and the phone's saved transcript).
-    var plainText: String {
-        ([title] + paragraphs).joined(separator: "\n\n")
-    }
-}
-
-/// Looks things up on the web: OpenAI's Responses API with web search, or Gemini with Google Search grounding.
+/// The menu and tool share this registry. Adding a provider does not change the tool or its output.
+@MainActor
 enum WebResearch {
-    static let model = "gpt-5.5"
-    static let geminiModel = "gemini-flash-latest"
+    static let service = WebSearchService(providers: [ExaWebSearchProvider()])
+    private static let logger = Logger(subsystem: "dev.luccabonim.bluey", category: "WebSearch")
 
-    enum ResearchError: LocalizedError {
-        case noKey(VoiceProvider), failed(String)
-        var errorDescription: String? {
-            switch self {
-            case .noKey(let provider):
-                return "I need \(provider == .gemini ? "a" : "an") \(provider.title) API key for research. Add one under \(provider.title) Key in the menu bar."
-            case .failed(let why): return "The research didn't come back: \(why.prefix(160))"
-            }
-        }
+    static func credentialSlot(for provider: WebSearchProviderInfo) -> Keychain.Key {
+        .init(rawValue: provider.credentialID)!
     }
 
-    private static let instructions = """
-    Research the question on the web and write a short, friendly report for a busy person. \
-    First line: a plain title of under eight words. Then one to four short paragraphs (four at most), \
-    leading with the direct answer, then the most useful details. Plain text only: no markdown, \
-    no headings, no bullet lists, and no links or citations in the text.
-    """
-
-    static func research(_ question: String, context: String?) async throws -> ResearchReport {
-        var input = question
-        if let context, !context.isEmpty { input += "\n\nWhat's on the user's screen, for context: \(context)" }
-        let (answer, sources) = Settings.shared.provider == .gemini
-            ? try await askGemini(input) : try await askOpenAI(input)
-        var text = answer
-        // Drop inline citations like "([site.com](https://…))" and any stray markdown.
-        text = text.replacingOccurrences(of: #"\s*\(\[[^\]]*\]\([^)]*\)\)"#, with: "", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
-        text = text.replacingOccurrences(of: #"\s*\[https?://[^\]]*\]"#, with: "", options: .regularExpression)
-        text = text.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "#", with: "")
-        let blocks = text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        guard let title = blocks.first else { throw ResearchError.failed("empty answer") }
-        return ResearchReport(question: question, title: title, paragraphs: Array(blocks.dropFirst().prefix(4)),
-                              sources: Array(sources.prefix(5)))
-    }
-
-    /// OpenAI's Responses API with its web search tool.
-    private static func askOpenAI(_ input: String) async throws -> (String, [(String, URL)]) {
-        guard let key = Keychain.get(.openai) else { throw ResearchError.noKey(.openai) }
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 90
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "model": model,
-            "reasoning": ["effort": "low"],
-            "tools": [["type": "web_search"]],
-            "instructions": instructions,
-            "input": input,
-        ])
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200, let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ResearchError.failed("\(code) " + (String(data: data, encoding: .utf8) ?? ""))
+    static func research(_ request: WebSearchRequest, onStart: () -> Void) async -> WebSearchResult {
+        // Capture settings before suspending: a menu change cannot redirect an in-flight call.
+        let selected = Settings.shared.webSearchProvider
+        let key = service.availableProviders.first(where: { $0.id == selected })
+            .flatMap { Keychain.get(credentialSlot(for: $0)) }
+        let start = Date()
+        let result: WebSearchResult
+        if let unavailable = service.unavailable(request, selected: selected, apiKey: key) {
+            result = unavailable
+        } else {
+            if !request.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { onStart() }
+            result = await service.search(request, selected: selected, apiKey: key)
         }
-
-        var text = ""
-        var sources: [(String, URL)] = []
-        for item in json["output"] as? [[String: Any]] ?? [] where item["type"] as? String == "message" {
-            for part in item["content"] as? [[String: Any]] ?? [] {
-                text += part["text"] as? String ?? ""
-                for note in part["annotations"] as? [[String: Any]] ?? [] {
-                    guard let link = note["url"] as? String, let url = URL(string: Self.clean(link)),
-                          !sources.contains(where: { $0.1 == url }) else { continue }
-                    sources.append((note["title"] as? String ?? url.host() ?? link, url))
-                }
-            }
-        }
-        return (text, sources)
-    }
-
-    /// Gemini's generateContent with Google Search grounding.
-    private static func askGemini(_ input: String) async throws -> (String, [(String, URL)]) {
-        guard let key = Keychain.get(.gemini) else { throw ResearchError.noKey(.gemini) }
-        var request = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(geminiModel):generateContent")!)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 90
-        request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "systemInstruction": ["parts": [["text": instructions]]],
-            "contents": [["role": "user", "parts": [["text": input]]]],
-            "tools": [["google_search": [String: Any]()]],
-        ])
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard code == 200, let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidate = (json["candidates"] as? [[String: Any]])?.first else {
-            throw ResearchError.failed("\(code) " + (String(data: data, encoding: .utf8) ?? ""))
-        }
-        let parts = (candidate["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
-        let text = parts.compactMap { $0["text"] as? String }.joined()
-        var sources: [(String, URL)] = []
-        let chunks = (candidate["groundingMetadata"] as? [String: Any])?["groundingChunks"] as? [[String: Any]] ?? []
-        for chunk in chunks {
-            guard let web = chunk["web"] as? [String: Any], let link = web["uri"] as? String, let url = URL(string: link),
-                  !sources.contains(where: { $0.1 == url }) else { continue }
-            sources.append((web["title"] as? String ?? url.host() ?? link, url))
-        }
-        return (text, sources)
-    }
-
-    /// Removes tracking parameters the search tool adds.
-    private static func clean(_ link: String) -> String {
-        guard var parts = URLComponents(string: link) else { return link }
-        parts.queryItems = parts.queryItems?.filter { $0.name != "utm_source" }
-        if parts.queryItems?.isEmpty == true { parts.queryItems = nil }
-        return parts.string ?? link
+        let duration = Int(Date().timeIntervalSince(start) * 1000)
+        // Metadata only: never keys, questions, screen contents, or raw provider error bodies.
+        logger.info("request=\(request.id.uuidString, privacy: .public) provider=\(selected ?? "disabled", privacy: .public) status=\(result.status.rawValue, privacy: .public) error=\(result.error?.code.rawValue ?? "none", privacy: .public) duration_ms=\(duration) cost_usd=\(result.costUSD.map { String($0) } ?? "unknown", privacy: .public) provider_request=\(result.providerRequestID ?? "unknown", privacy: .public)")
+        return result
     }
 }
