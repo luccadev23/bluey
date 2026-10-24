@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// A tiny, quiet speaker button in the top-right corner. Tap it for the chirp volume, a test hi, and which Mac to pair with.
+/// A small, quiet speaker button in the top-right corner. Tap it for the chirp volume, a test hi, and which Mac to pair with.
 struct SoundButton: View {
     @ObservedObject var link: MacLink
     @ObservedObject var live: LiveVoice
+    /// Top of the usable screen, below the Dynamic Island.
+    let chromeTop: CGFloat
     @State private var volume = 1.0
     @State private var open = false
     @State private var lastTouch = Date()
@@ -15,20 +17,21 @@ struct SoundButton: View {
                 lastTouch = Date()
             } label: {
                 Image(systemName: open ? "xmark" : speakerIcon)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white.opacity(open ? 0.9 : 0.35))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white.opacity(open ? 0.9 : 0.6))
                     .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.white.opacity(open ? 0.14 : 0.06)).frame(width: 34, height: 34))
+                    .background(Circle().fill(Color.white.opacity(open ? 0.14 : 0.12)).frame(width: 40, height: 40))
             }
             .buttonStyle(.plain)
+            .padding(.trailing, 54)  // sits left of the Open Bluey button; the panel below lines up with the screen margin
             .accessibilityLabel(open ? "Close sound settings" : "Sound settings")
 
             if open {
                 panel.transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .topTrailing)))
             }
         }
-        .padding(.top, 10)
-        .padding(.trailing, 14)
+        .padding(.top, chromeTop - 1)
+        .padding(.trailing, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .onAppear { volume = live.volume }
         .task(id: lastTouch) {

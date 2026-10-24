@@ -11,6 +11,16 @@ public enum Palette {
     public static let inkSoft: UInt32 = 0xB9B2CC
     public static let panel: UInt32 = 0x1E1B29
 
+    // Status and mode colors used around the app.
+    public static let modeBlue: UInt32 = 0x4F8BFF  // listening / holding to ask
+    public static let modeYellow: UInt32 = 0xFFD66B  // waking up
+    public static let modePurple: UInt32 = 0xC79BFF  // thinking
+    public static let modePink: UInt32 = 0xFF9AD0  // replying
+    public static let online: UInt32 = 0x5BE49B
+    public static let danger: UInt32 = 0xE5547A
+    public static let reportPanel: UInt32 = 0x1B2145
+    public static let reportText: UInt32 = 0xE4E6FF
+
     public static let gradient: [UInt32] = [berry1, berry2, berry3, berry4]
     public static let gradientStops: [Double] = [0, 0.34, 0.68, 1]
 

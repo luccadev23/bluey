@@ -22,51 +22,70 @@ struct RootView: View {
     @State private var showPairing = true
     @State private var holdStart: DispatchWorkItem?
     @State private var holdingToAsk = false
+    @AppStorage("hasWokenBluey") private var hasWoken = false
+
+    /// A quiet line near the bottom: how to wake him until you have, and what letting go does while you hold.
+    private var hint: (icon: String, text: String)? {
+        if live.state == .asking { return ("hand.tap.fill", "Release and he answers") }
+        if live.state == .asleep && !hasWoken && !(showPairing && !link.connected) { return ("hand.tap", "Double-tap to wake him up") }
+        return nil
+    }
 
     var body: some View {
-        ZStack {
-            FaceView(animator: animator)
-                .contentShape(Rectangle())
-                .onTapGesture(count: 2) { live.toggle() }  // double tap: wake up / back to follow mode
-                .simultaneousGesture(holdToAsk)
+        // Read the top safe area here, before ignoring it, so the controls clear the Dynamic Island.
+        GeometryReader { geo in
+            let chromeTop = max(geo.safeAreaInsets.top, 20)
+            ZStack {
+                FaceView(animator: animator)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { live.toggle() }  // double tap: wake up / back to follow mode
+                    .simultaneousGesture(holdToAsk)
 
-            ModeIndicator(state: live.state)
+                ModeIndicator(state: live.state, chromeTop: chromeTop)
 
-            if let message = live.statusMessage {
-                Text(message)
-                    .font(.plexSans(14))
-                    .foregroundStyle(.white)
-                    .padding(12)
-                    .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal, 80)
-                    .padding(.bottom, 18)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .allowsHitTesting(false)
+                if let message = live.statusMessage {
+                    Text(message)
+                        .font(.plexSans(14))
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .padding(12)
+                        .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 40)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .allowsHitTesting(false)
+                } else if let hint {
+                    HintPill(icon: hint.icon, text: hint.text)
+                        .padding(.bottom, 44)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+
+                SoundButton(link: link, live: live, chromeTop: chromeTop)
+
+                // Bluey's app: sessions, transcripts and settings.
+                Button { showApp = true } label: {
+                    Image(systemName: "square.grid.2x2.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(Color.white.opacity(0.12)).frame(width: 40, height: 40))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open Bluey")
+                .padding(.top, chromeTop - 1)
+                .padding(.trailing, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+
+                if showPairing && !link.connected {
+                    PairingView { withAnimation(.easeOut(duration: 0.3)) { showPairing = false } }
+                        .transition(.opacity)
+                }
             }
-
-            SoundButton(link: link, live: live)
-
-            // Bluey's app: sessions, transcripts and settings.
-            Button { showApp = true } label: {
-                Image(systemName: "square.grid.2x2.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.35))
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(Color.white.opacity(0.06)).frame(width: 34, height: 34))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Open Bluey")
-            .padding(.top, 10)
-            .padding(.trailing, 62)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-
-            if showPairing && !link.connected {
-                PairingView { withAnimation(.easeOut(duration: 0.3)) { showPairing = false } }
-                    .transition(.opacity)
-            }
+            .ignoresSafeArea()
         }
         .background(Color.black)
-        .ignoresSafeArea()
         .phoneChrome()
         .fullScreenCover(isPresented: $showApp) {
             BlueyAppView(store: store, live: live, link: link) { showApp = false }
@@ -84,6 +103,9 @@ struct RootView: View {
                 if live.state == .asleep { NotesSync.recoverPending(store: store, link: link) }
                 store.resyncRecent()
             }
+        }
+        .onChange(of: live.state) { _, state in
+            if state != .asleep { hasWoken = true }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { link.start() }
@@ -182,10 +204,29 @@ struct RootView: View {
     }
 }
 
+/// A small dark pill with a hint, like "Double-tap to wake him up".
+struct HintPill: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+            Text(text).font(.plexSans(14).weight(.semibold))
+        }
+        .foregroundStyle(.white.opacity(0.85))
+        .padding(.horizontal, 18)
+        .frame(minHeight: 40)
+        .background(Capsule().fill(Color.black.opacity(0.55)))
+    }
+}
+
 /// Shows which mode he's in: a solid border hugging the screen's own rounded corners (blue while he listens),
-/// plus a small label in the corner. Following your mouse is just a little eye icon. No glows.
+/// plus a small label in the top-left corner. Following your mouse (asleep) shows nothing; his face says it. No glows.
 struct ModeIndicator: View {
     let state: LiveVoice.State
+    /// Top of the usable screen (below the Dynamic Island), so the label lines up with the buttons on the right.
+    let chromeTop: CGFloat
 
     private struct Look {
         let color: Color
@@ -193,53 +234,62 @@ struct ModeIndicator: View {
         let icon: String
         let border: CGFloat   // 0 = no border
         let pulse: Double     // pulses per second (opacity only)
+        var textColor: Color = .white
     }
-
-    private static let blue = Color(hex: 0x4F8BFF)
 
     private var look: Look {
         switch state {
         case .asleep:    return Look(color: Color(hex: Palette.inkSoft), label: nil, icon: "eye.fill", border: 0, pulse: 0)
-        case .waking:    return Look(color: Color(hex: 0xFFD66B), label: "Waking up", icon: "sun.max.fill", border: 6, pulse: 1.6)
-        case .listening: return Look(color: Self.blue, label: "Listening · hold to ask", icon: "ear", border: 10, pulse: 0)
-        case .asking:    return Look(color: Self.blue, label: "I'm all ears", icon: "mic.fill", border: 16, pulse: 1.2)
-        case .thinking:  return Look(color: Color(hex: 0xC79BFF), label: "Thinking", icon: "sparkles", border: 8, pulse: 1.1)
-        case .speaking:  return Look(color: Color(hex: 0xFF9AD0), label: "Replying", icon: "bubble.left.fill", border: 8, pulse: 0)
+        case .waking:    return Look(color: Color(hex: Palette.modeYellow), label: "Waking up", icon: "sun.max.fill", border: 4, pulse: 1.6, textColor: Color(hex: Palette.ink))
+        case .listening: return Look(color: Color(hex: Palette.modeBlue), label: "Listening · hold to ask", icon: "ear", border: 6, pulse: 0)
+        case .asking:    return Look(color: Color(hex: Palette.modeBlue), label: "I'm all ears", icon: "mic.fill", border: 10, pulse: 1.2)
+        case .thinking:  return Look(color: Color(hex: Palette.modePurple), label: "Thinking", icon: "sparkles", border: 6, pulse: 1.1)
+        case .speaking:  return Look(color: Color(hex: Palette.modePink), label: "Replying", icon: "bubble.left.fill", border: 6, pulse: 0, textColor: Color(hex: Palette.ink))
         }
     }
 
     /// The phone screen's own corner radius, so the border lines up with the glass.
     private static let screenCornerRadius: CGFloat = {
         #if canImport(UIKit)
-        if let radius = UIScreen.main.value(forKey: "_displayCornerRadius") as? CGFloat, radius > 0 { return radius }
-        #endif
+        return FaceLayout.screenCornerRadius(nativeHeight: Double(UIScreen.main.nativeBounds.height))
+        #else
         return 55
+        #endif
     }()
 
     var body: some View {
         let look = look
+        let radius = Self.screenCornerRadius
         TimelineView(.animation(paused: look.pulse == 0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             let wave = look.pulse > 0 ? 0.5 + 0.5 * sin(t * look.pulse * 2 * .pi) : 1
             ZStack(alignment: .topLeading) {
                 if look.border > 0 {
-                    RoundedRectangle(cornerRadius: Self.screenCornerRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .strokeBorder(look.color, lineWidth: look.border)
                         .opacity(look.pulse > 0 ? 0.65 + 0.35 * wave : 1)
                 }
-                HStack(spacing: 7) {
-                    Image(systemName: look.icon)
-                        .font(.system(size: 14, weight: .bold))
-                    if let label = look.label {
+                if state == .asking {
+                    // A fainter ring just inside the border that breathes while he's listening to your question.
+                    RoundedRectangle(cornerRadius: max(radius - look.border - 6, 16), style: .continuous)
+                        .strokeBorder(look.color, lineWidth: 3)
+                        .padding(look.border + 6)
+                        .opacity(0.15 + 0.35 * wave)
+                }
+                // Asleep he just follows your mouse, and his face already says so: nothing to show.
+                if let label = look.label {
+                    HStack(spacing: 7) {
+                        Image(systemName: look.icon)
+                            .font(.system(size: 14, weight: .bold))
                         Text(label).font(.fredoka(16))
                     }
+                    .foregroundStyle(look.textColor)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 34)
+                    .background(Capsule().fill(look.color))
+                    .padding(.top, chromeTop + 4)
+                    .padding(.leading, 24 + look.border)
                 }
-                .foregroundStyle(look.label == nil ? look.color.opacity(0.7) : .white)
-                .padding(.horizontal, look.label == nil ? 0 : 14)
-                .frame(minWidth: 34, minHeight: 34)
-                .background(Capsule().fill(look.label == nil ? Color.white.opacity(0.06) : look.color))
-                .padding(.top, 14 + look.border)
-                .padding(.leading, 24 + look.border)
             }
         }
         .ignoresSafeArea()

@@ -19,6 +19,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.luccabonim.bluey.phone
         PRODUCT_NAME: Bluey
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
@@ -33,8 +34,7 @@ targets:
         UIStatusBarHidden: true
         UIApplicationSupportsIndirectInputEvents: true
         UISupportedInterfaceOrientations:
-          - UIInterfaceOrientationLandscapeLeft
-          - UIInterfaceOrientationLandscapeRight
+          - UIInterfaceOrientationPortrait
         NSLocalNetworkUsageDescription: Bluey finds the Mac app on your Wi-Fi so the character can look where it points.
         NSMicrophoneUsageDescription: Talk to your blueberry. He listens while he's awake (double tap him to wake him up or put him to sleep).
         NSBonjourServices:

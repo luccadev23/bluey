@@ -1,6 +1,6 @@
 # Bluey
 
-A blueberry character who lives on an iPhone under your Mac's screen and points at things with his own big cursor.
+A blueberry character who lives on an iPhone standing under your Mac's screen and points at things with his own big cursor.
 
 **Now:** no voice out. Double tap him on the phone (or press ⌥Space on the Mac) to start a session: the phone's mic stays on and everything you say becomes context, but he stays quiet. **Press and hold the screen** to ask him something; let go and he answers. His reply pops up as a cute speech bubble next to his cursor (or above the phone when he isn't pointing), with a little cartoon chirp from the phone. Ask "what's this?" and he points at whatever is under your mouse. Double tap again and he goes back to follow mode.
 
@@ -45,7 +45,7 @@ The menu bar blob also sets mood, cursor size (48 to 120 pt), glow, and where th
 
 Needs full Xcode and iOS 26 on a supported iPhone for speech recognition. The rest of the UI retains its iOS 17 deployment target. Open `GooglyEyes.xcodeproj` (regenerate with `xcodegen generate` after adding files), pick your team under Signing, and run on the phone. It finds the Mac on the same Wi-Fi by itself.
 
-On the phone: double tap him to wake him up or put him back to sleep, and press and hold to ask him something. The faint speaker button at the top right sets the chirp volume and picks which Mac to pair with.
+The app is portrait-only. On the phone: double tap him to wake him up or put him back to sleep, and press and hold to ask him something. The speaker button at the top right sets the chirp volume and picks which Mac to pair with; the grid button next to it opens his sessions. The border around the screen shows his mode.
 
 ## Layout
 

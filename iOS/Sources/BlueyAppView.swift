@@ -12,12 +12,102 @@ struct BlueyAppView: View {
 
     var body: some View {
         NavigationStack {
-            HStack(spacing: 0) {
-                sidebar
-                    .frame(width: 300)
-                    .background(Color(hex: Palette.panel).opacity(0.6))
-                sessionList
+            List {
+                header
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 4, trailing: 20))
+                    .listRowSeparator(.hidden)
+
+                Section {
+                    startButton
+                    Text(live.state == .asleep
+                         ? "He listens the whole session. Hold his face to ask something, let go and he answers."
+                         : "Session running. Hold his face to ask; everything you say is saved here.")
+                        .font(.plexSans(13))
+                        .foregroundStyle(Color(hex: Palette.inkSoft))
+                        .listRowSeparator(.hidden)
+                }
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+
+                Section {
+                    if store.sessions.isEmpty {
+                        emptyState
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    } else {
+                        sessionPager
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                    }
+                } header: {
+                    HStack {
+                        Text("Sessions")
+                            .font(.fredoka(22))
+                            .foregroundStyle(.white)
+                        Spacer()
+                        Text("\(store.sessions.count)")
+                            .font(.plexMono(13))
+                            .foregroundStyle(Color(hex: Palette.inkSoft))
+                    }
+                    .textCase(nil)
+                }
+
+                Section {
+                    Picker("Speech language", selection: $speechLocale) {
+                        Text("Device language").tag("")
+                        Text("Português (Brasil)").tag("pt-BR")
+                        Text("English (US)").tag("en-US")
+                        Text("English (UK)").tag("en-GB")
+                    }
+                    .disabled(live.state != .asleep)
+                    .listRowBackground(Color(hex: Palette.panel))
+
+                    HStack(spacing: 12) {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .foregroundStyle(Color(hex: Palette.inkSoft))
+                        Slider(value: Binding(get: { volume }, set: { volume = $0; live.volume = $0 }), in: 0...1)
+                        Text("\(Int((volume * 100).rounded()))%")
+                            .font(.plexMono(13))
+                            .foregroundStyle(.white)
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                    .listRowBackground(Color(hex: Palette.panel))
+
+                    if link.macs.count > 1 {
+                        ForEach(link.macs, id: \.self) { name in
+                            Button { link.choose(name) } label: {
+                                HStack {
+                                    Text(name).font(.plexSans(15)).foregroundStyle(.white).lineLimit(1)
+                                    Spacer()
+                                    if name == link.currentMac {
+                                        Image(systemName: link.connected ? "checkmark" : "ellipsis")
+                                            .foregroundStyle(Color(hex: Palette.berry2))
+                                    }
+                                }
+                                .frame(minHeight: 36)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color(hex: Palette.panel))
+                        }
+                    }
+                } header: {
+                    label("Settings")
+                } footer: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Speech is transcribed on your iPhone. Requires iOS 26 and a supported device and language.")
+                        if let message = live.statusMessage {
+                            Text(message).foregroundStyle(.white)
+                        }
+                    }
+                    .font(.plexSans(12))
+                    .foregroundStyle(Color(hex: Palette.inkSoft))
+                }
             }
+            .scrollContentBackground(.hidden)
+            .listStyle(.insetGrouped)
             .background(Color.black)
             .navigationDestination(for: UUID.self) { id in
                 SessionDetailView(store: store, id: id)
@@ -29,118 +119,106 @@ struct BlueyAppView: View {
         .onAppear { volume = live.volume }
     }
 
-    // MARK: Left: who he is, start/end, settings
+    // MARK: Pieces
 
-    private var sidebar: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 12) {
-                    MiniBluey()
-                        .frame(width: 54, height: 48)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Bluey")
-                            .font(.fredoka(28))
-                            .foregroundStyle(.white)
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(link.connected ? Color(hex: 0x5BE49B) : Color(hex: Palette.inkSoft).opacity(0.5))
-                                .frame(width: 7, height: 7)
-                            Text(link.connected ? (link.macName ?? link.currentMac ?? "Mac") : "Looking for your Mac")
-                                .font(.plexSans(12))
-                                .foregroundStyle(Color(hex: Palette.inkSoft))
-                                .lineLimit(1)
-                        }
-                    }
+    /// At most this many sessions show at once; with more, the list scrolls inside its own box.
+    private static let visibleSessions = 3
+    private static let sessionRowHeight: CGFloat = 64
+
+    private var sessionPager: some View {
+        let count = store.sessions.count
+        return List {
+            ForEach(store.sessions) { session in
+                NavigationLink(value: session.id) {
+                    SessionRow(session: session, live: session.id == store.currentID)
+                        .frame(height: Self.sessionRowHeight - 16)
                 }
-
-                Button {
-                    let starting = live.state == .asleep
-                    live.toggle()
-                    if starting { onClose() }  // back to his face when starting
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: live.state == .asleep ? "play.fill" : "stop.fill")
-                        Text(live.state == .asleep ? "Start session" : "End session")
-                    }
-                    .font(.fredoka(18))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .background {
-                        if live.state == .asleep {
-                            RoundedRectangle(cornerRadius: 16).fill(BlobShape.linear)
-                        } else {
-                            RoundedRectangle(cornerRadius: 16).fill(Color(hex: 0xE5547A))
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-
-                Text(live.state == .asleep
-                     ? "He listens the whole session. Hold his face to ask something, let go and he answers."
-                     : "Session running. Hold his face to ask; everything you say is saved here.")
-                    .font(.plexSans(12))
-                    .foregroundStyle(Color(hex: Palette.inkSoft))
-
-                Divider().overlay(Color.white.opacity(0.08))
-
-                VStack(alignment: .leading, spacing: 8) {
-                    label("Speech language")
-                    Picker("Speech language", selection: $speechLocale) {
-                        Text("Device language").tag("")
-                        Text("Português (Brasil)").tag("pt-BR")
-                        Text("English (US)").tag("en-US")
-                        Text("English (UK)").tag("en-GB")
-                    }
-                    .disabled(live.state != .asleep)
-                    Text("Speech is transcribed on your iPhone. Requires iOS 26 and a supported device and language.")
-                        .font(.plexSans(12))
-                        .foregroundStyle(Color(hex: Palette.inkSoft))
-                }
-
-                if let message = live.statusMessage {
-                    Text(message).font(.plexSans(12)).foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    label("Chirp volume")
-                    Slider(value: Binding(get: { volume }, set: { volume = $0; live.volume = $0 }), in: 0...1)
-                }
-
-                if link.macs.count > 1 {
-                    VStack(alignment: .leading, spacing: 4) {
-                        label("Mac")
-                        ForEach(link.macs, id: \.self) { name in
-                            Button { link.choose(name) } label: {
-                                HStack {
-                                    Text(name).font(.plexSans(14)).foregroundStyle(.white).lineLimit(1)
-                                    Spacer()
-                                    if name == link.currentMac {
-                                        Image(systemName: link.connected ? "checkmark" : "ellipsis")
-                                            .foregroundStyle(Color(hex: Palette.berry2))
-                                    }
-                                }
-                                .frame(minHeight: 34)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                Button(action: onClose) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "face.smiling")
-                        Text("Back to his face")
-                    }
-                    .font(.plexSans(15).weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
+                .listRowBackground(Color(hex: Palette.panel))
             }
-            .padding(22)
+            .onDelete { offsets in
+                offsets.map { store.sessions[$0].id }.forEach(store.delete)
+            }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, Self.sessionRowHeight)
+        .frame(height: CGFloat(min(count, Self.visibleSessions)) * Self.sessionRowHeight)
+        .scrollDisabled(count <= Self.visibleSessions)
+        .background(Color(hex: Palette.panel))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            MiniBluey()
+                .frame(width: 54, height: 48)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Bluey")
+                    .font(.fredoka(28))
+                    .foregroundStyle(.white)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(link.connected ? Color(hex: Palette.online) : Color(hex: Palette.inkSoft).opacity(0.5))
+                        .frame(width: 7, height: 7)
+                    Text(link.connected ? (link.macName ?? link.currentMac ?? "Mac") : "Looking for your Mac")
+                        .font(.plexSans(13))
+                        .foregroundStyle(Color(hex: Palette.inkSoft))
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.12), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back to his face")
+        }
+    }
+
+    private var startButton: some View {
+        Button {
+            let starting = live.state == .asleep
+            live.toggle()
+            if starting { onClose() }  // back to his face when starting
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: live.state == .asleep ? "play.fill" : "stop.fill")
+                Text(live.state == .asleep ? "Start session" : "End session")
+            }
+            .font(.fredoka(18))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 54)
+            .background {
+                if live.state == .asleep {
+                    RoundedRectangle(cornerRadius: 16).fill(BlobShape.linear)
+                } else {
+                    RoundedRectangle(cornerRadius: 16).fill(Color(hex: Palette.danger))
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .listRowSeparator(.hidden)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "text.bubble")
+                .font(.system(size: 34))
+                .foregroundStyle(Color(hex: Palette.berry2))
+            Text("No sessions yet")
+                .font(.fredoka(18))
+                .foregroundStyle(.white)
+            Text("Start one and your transcript and his replies show up here.")
+                .font(.plexSans(13))
+                .foregroundStyle(Color(hex: Palette.inkSoft))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
     }
 
     private func label(_ text: String) -> some View {
@@ -148,54 +226,6 @@ struct BlueyAppView: View {
             .font(.plexMono(11))
             .textCase(.uppercase)
             .foregroundStyle(Color(hex: Palette.inkSoft))
-    }
-
-    // MARK: Right: sessions
-
-    private var sessionList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Sessions")
-                    .font(.fredoka(24))
-                    .foregroundStyle(.white)
-                Spacer()
-                Text("\(store.sessions.count)")
-                    .font(.plexMono(13))
-                    .foregroundStyle(Color(hex: Palette.inkSoft))
-            }
-            .padding(.horizontal, 22)
-            .padding(.top, 20)
-            .padding(.bottom, 8)
-
-            if store.sessions.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "text.bubble")
-                        .font(.system(size: 34))
-                        .foregroundStyle(Color(hex: Palette.berry2))
-                    Text("No sessions yet")
-                        .font(.fredoka(18))
-                        .foregroundStyle(.white)
-                    Text("Start one and your transcript and his replies show up here.")
-                        .font(.plexSans(13))
-                        .foregroundStyle(Color(hex: Palette.inkSoft))
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    ForEach(store.sessions) { session in
-                        NavigationLink(value: session.id) {
-                            SessionRow(session: session, live: session.id == store.currentID)
-                        }
-                        .listRowBackground(Color(hex: Palette.panel))
-                    }
-                    .onDelete { offsets in
-                        offsets.map { store.sessions[$0].id }.forEach(store.delete)
-                    }
-                }
-                .scrollContentBackground(.hidden)
-                .listStyle(.insetGrouped)
-            }
-        }
     }
 }
 
@@ -216,7 +246,7 @@ private struct SessionRow: View {
                             .foregroundStyle(.black)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color(hex: 0x5BE49B), in: Capsule())
+                            .background(Color(hex: Palette.online), in: Capsule())
                     }
                 }
                 Text(session.summary)
@@ -282,53 +312,65 @@ struct SessionDetailView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 14) {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(width: 40, height: 40)
-                        .background(Color.white.opacity(0.08), in: Circle())
-                }
-                .buttonStyle(.plain)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(session?.started.formatted(date: .abbreviated, time: .shortened) ?? "Session")
-                        .font(.fredoka(20))
-                        .foregroundStyle(.white)
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                            .background(Color.white.opacity(0.08), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Back")
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(session?.started.formatted(date: .abbreviated, time: .shortened) ?? "Session")
+                            .font(.fredoka(20))
+                            .foregroundStyle(.white)
+                        if let session {
+                            Text("\(SessionRow.duration(session.duration)) · \(session.questionCount) asked")
+                                .font(.plexMono(12))
+                                .foregroundStyle(Color(hex: Palette.inkSoft))
+                        }
+                    }
+                    Spacer(minLength: 0)
                     if let session {
-                        Text("\(SessionRow.duration(session.duration)) · \(session.questionCount) asked"
-                             + (session.transcribing > 0 ? " · \(session.transcribing) recordings await local recovery" : "")
-                             + (session.archiving > 0 ? " · saving \(session.archiving) recordings" : ""))
-                            .font(.plexMono(11))
-                            .foregroundStyle(Color(hex: Palette.inkSoft))
-                        if let error = session.recoveryError {
-                            Text(error).font(.plexSans(12)).foregroundStyle(.orange)
+                        ShareLink(item: session.exportText) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 44, height: 44)
+                                .background(Color.white.opacity(0.08), in: Circle())
                         }
                     }
                 }
-                Spacer()
                 if let session {
                     Button { copyPrompt(session) } label: {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                             Text(copied ? "Copied" : "Copy prompt for agent")
                         }
-                        .font(.plexSans(13).weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .frame(height: 40)
+                        .font(.plexSans(14).weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
                         .background(Color(hex: Palette.berry3), in: Capsule())
                     }
                     .buttonStyle(.plain)
-                    ShareLink(item: session.exportText) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: 40, height: 40)
-                            .background(Color.white.opacity(0.08), in: Circle())
+                    let notes = [session.transcribing > 0 ? "\(session.transcribing) recordings await local recovery" : nil,
+                                 session.archiving > 0 ? "saving \(session.archiving) recordings" : nil].compactMap { $0 }
+                    if !notes.isEmpty {
+                        Text(notes.joined(separator: " · "))
+                            .font(.plexMono(11))
+                            .foregroundStyle(Color(hex: Palette.inkSoft))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    if let error = session.recoveryError {
+                        Text(error).font(.plexSans(12)).foregroundStyle(.orange)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 22)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -337,7 +379,7 @@ struct SessionDetailView: View {
                             EntryView(entry: entry).id(entry.id)
                         }
                     }
-                    .padding(.horizontal, 22)
+                    .padding(.horizontal, 20)
                     .padding(.bottom, 24)
                 }
                 .onAppear { if let last = session?.entries.last { proxy.scrollTo(last.id, anchor: .bottom) } }
@@ -347,8 +389,23 @@ struct SessionDetailView: View {
             }
         }
         .background(Color.black)
+        .background(SwipeBackEnabler())
         .toolbar(.hidden, for: .navigationBar)
     }
+}
+
+/// Hiding the navigation bar also turns off swiping back from the left edge; this turns it back on.
+private struct SwipeBackEnabler: UIViewControllerRepresentable {
+    final class Controller: UIViewController {
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            navigationController?.interactivePopGestureRecognizer?.delegate = nil
+            navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+        }
+    }
+
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) {}
 }
 
 private struct EntryView: View {
@@ -364,20 +421,20 @@ private struct EntryView: View {
     var body: some View {
         switch entry.kind {
         case .transcript:
-            HStack(alignment: .top, spacing: 10) {
-                Text(entry.speaker.map { "Speaker \($0)" } ?? "Speech")
-                    .font(.plexMono(11).weight(.medium))
-                    .foregroundStyle(Self.speakerColor(entry.speaker))
-                    .frame(width: 78, alignment: .leading)
-                    .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(entry.speaker.map { "Speaker \($0)" } ?? "Speech")
+                        .font(.plexMono(11).weight(.medium))
+                        .foregroundStyle(Self.speakerColor(entry.speaker))
+                    Spacer()
+                    Text(entry.time.formatted(date: .omitted, time: .shortened))
+                        .font(.plexMono(10))
+                        .foregroundStyle(Color(hex: Palette.inkSoft).opacity(0.7))
+                }
                 Text(entry.text)
                     .font(.plexSans(15))
                     .foregroundStyle(.white.opacity(0.92))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(entry.time.formatted(date: .omitted, time: .shortened))
-                    .font(.plexMono(10))
-                    .foregroundStyle(Color(hex: Palette.inkSoft).opacity(0.7))
-                    .padding(.top, 3)
             }
         case .heard:
             Text(entry.text)
@@ -387,7 +444,7 @@ private struct EntryView: View {
                 .padding(.leading, 4)
         case .asked:
             HStack {
-                Spacer(minLength: 120)
+                Spacer(minLength: 48)
                 VStack(alignment: .trailing, spacing: 3) {
                     Text("You asked")
                         .font(.plexMono(10))
@@ -409,17 +466,17 @@ private struct EntryView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                Spacer(minLength: 120)
+                Spacer(minLength: 48)
             }
         case .report:
             let lines = entry.text.components(separatedBy: "\n\n")
             VStack(alignment: .leading, spacing: 8) {
                 Button { withAnimation(.spring(duration: 0.3)) { open.toggle() } } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "doc.text.magnifyingglass").foregroundStyle(Color(hex: Palette.berry2))
+                        Image(systemName: "doc.text.magnifyingglass").foregroundStyle(Color(hex: Palette.berry1))
                         Text(lines.first ?? "Research")
                             .font(.fredoka(16))
-                            .foregroundStyle(Color(hex: Palette.ink))
+                            .foregroundStyle(.white)
                             .multilineTextAlignment(.leading)
                         Spacer()
                         Image(systemName: open ? "minus" : "plus")
@@ -432,19 +489,18 @@ private struct EntryView: View {
                 .buttonStyle(.plain)
                 Text(lines.dropFirst().joined(separator: "\n\n"))
                     .font(.plexSans(14))
-                    .foregroundStyle(Color(hex: Palette.ink))
+                    .foregroundStyle(Color(hex: Palette.reportText))
                     .lineLimit(open ? nil : 3)
             }
             .padding(14)
-            .background(Color(hex: 0xEEF0FF), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(Color(hex: Palette.reportPanel), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Color(hex: Palette.berry2), lineWidth: 2))
-            .padding(.leading, 36)
-            .padding(.trailing, 80)
+
         }
     }
 }
 
-/// A tiny Bluey: the blob with two googly eyes.
+/// A tiny Bluey: the blob with two googly eyes and his half-moon mouth.
 struct MiniBluey: View {
     var body: some View {
         GeometryReader { geo in
@@ -459,7 +515,12 @@ struct MiniBluey: View {
                             .overlay(Circle().fill(Color(hex: Palette.ink)).frame(width: w * 0.12).offset(x: w * 0.02, y: w * 0.03))
                     }
                 }
-                .offset(y: -w * 0.04)
+                .offset(y: -w * 0.09)
+                UnevenRoundedRectangle(topLeadingRadius: w * 0.02, bottomLeadingRadius: w * 0.15,
+                                       bottomTrailingRadius: w * 0.15, topTrailingRadius: w * 0.02)
+                    .fill(Color(hex: Palette.nose))
+                    .frame(width: w * 0.3, height: w * 0.15)
+                    .offset(y: w * 0.23)
             }
         }
     }

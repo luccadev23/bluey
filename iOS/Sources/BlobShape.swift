@@ -34,38 +34,40 @@ enum UIFontCheck {
     static func has(_ family: String) -> Bool { families.contains(family) }
 }
 
-/// The blob outline: CSS `border-radius: 52% 48% 46% 54% / 58% 56% 44% 42%`.
+/// The blob outline: a rounded dome whose corner radii follow the Pencil design (250/230/220/240 on a 490 × 620 body).
 struct BlobShape: Shape {
     func path(in rect: CGRect) -> Path {
         BlobShape.path(in: rect)
     }
 
+    /// Corner radii as fractions of the width: top-left, top-right, bottom-right, bottom-left.
+    private static let radii: [CGFloat] = FaceLayout.bodyRadii.map { $0 / FaceLayout.body.width }
+
     static func path(in r: CGRect) -> Path {
         let w = r.width, h = r.height
-        // Horizontal and vertical radii for top-left, top-right, bottom-right, bottom-left.
-        let tl = CGSize(width: 0.52 * w, height: 0.58 * h)
-        let tr = CGSize(width: 0.48 * w, height: 0.56 * h)
-        let br = CGSize(width: 0.46 * w, height: 0.44 * h)
-        let bl = CGSize(width: 0.54 * w, height: 0.42 * h)
-        let k: CGFloat = 0.5523  // cubic approximation of a quarter ellipse
+        var tl = radii[0] * w, tr = radii[1] * w, br = radii[2] * w, bl = radii[3] * w
+        // Keep neighbouring corners from overlapping on short or narrow shapes.
+        let fit = min(1, h / max(tl + bl, 1), h / max(tr + br, 1), w / max(tl + tr, 1), w / max(bl + br, 1))
+        tl *= fit; tr *= fit; br *= fit; bl *= fit
+        let k: CGFloat = 0.5523  // cubic approximation of a quarter circle
         var p = Path()
-        p.move(to: CGPoint(x: r.minX + tl.width, y: r.minY))
-        p.addLine(to: CGPoint(x: r.maxX - tr.width, y: r.minY))
-        p.addCurve(to: CGPoint(x: r.maxX, y: r.minY + tr.height),
-                   control1: CGPoint(x: r.maxX - tr.width * (1 - k), y: r.minY),
-                   control2: CGPoint(x: r.maxX, y: r.minY + tr.height * (1 - k)))
-        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - br.height))
-        p.addCurve(to: CGPoint(x: r.maxX - br.width, y: r.maxY),
-                   control1: CGPoint(x: r.maxX, y: r.maxY - br.height * (1 - k)),
-                   control2: CGPoint(x: r.maxX - br.width * (1 - k), y: r.maxY))
-        p.addLine(to: CGPoint(x: r.minX + bl.width, y: r.maxY))
-        p.addCurve(to: CGPoint(x: r.minX, y: r.maxY - bl.height),
-                   control1: CGPoint(x: r.minX + bl.width * (1 - k), y: r.maxY),
-                   control2: CGPoint(x: r.minX, y: r.maxY - bl.height * (1 - k)))
-        p.addLine(to: CGPoint(x: r.minX, y: r.minY + tl.height))
-        p.addCurve(to: CGPoint(x: r.minX + tl.width, y: r.minY),
-                   control1: CGPoint(x: r.minX, y: r.minY + tl.height * (1 - k)),
-                   control2: CGPoint(x: r.minX + tl.width * (1 - k), y: r.minY))
+        p.move(to: CGPoint(x: r.minX + tl, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX - tr, y: r.minY))
+        p.addCurve(to: CGPoint(x: r.maxX, y: r.minY + tr),
+                   control1: CGPoint(x: r.maxX - tr * (1 - k), y: r.minY),
+                   control2: CGPoint(x: r.maxX, y: r.minY + tr * (1 - k)))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - br))
+        p.addCurve(to: CGPoint(x: r.maxX - br, y: r.maxY),
+                   control1: CGPoint(x: r.maxX, y: r.maxY - br * (1 - k)),
+                   control2: CGPoint(x: r.maxX - br * (1 - k), y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX + bl, y: r.maxY))
+        p.addCurve(to: CGPoint(x: r.minX, y: r.maxY - bl),
+                   control1: CGPoint(x: r.minX + bl * (1 - k), y: r.maxY),
+                   control2: CGPoint(x: r.minX, y: r.maxY - bl * (1 - k)))
+        p.addLine(to: CGPoint(x: r.minX, y: r.minY + tl))
+        p.addCurve(to: CGPoint(x: r.minX + tl, y: r.minY),
+                   control1: CGPoint(x: r.minX, y: r.minY + tl * (1 - k)),
+                   control2: CGPoint(x: r.minX + tl * (1 - k), y: r.minY))
         p.closeSubpath()
         return p
     }
@@ -85,19 +87,5 @@ struct BlobShape: Shape {
 
     static var linear: LinearGradient {
         LinearGradient(gradient: gradient, startPoint: UnitPoint(x: 0.25, y: 0.067), endPoint: UnitPoint(x: 0.75, y: 0.933))
-    }
-}
-
-/// The little blueberry crown on top of his head (SVG path from the design, 60×40 box).
-enum Crown {
-    static func path(in r: CGRect) -> Path {
-        let pts: [(CGFloat, CGFloat)] = [(30, 4), (36, 16), (52, 12), (40, 24), (46, 36), (30, 28), (14, 36), (20, 24), (8, 12), (24, 16)]
-        var p = Path()
-        for (i, pt) in pts.enumerated() {
-            let point = CGPoint(x: r.minX + pt.0 / 60 * r.width, y: r.minY + pt.1 / 40 * r.height)
-            if i == 0 { p.move(to: point) } else { p.addLine(to: point) }
-        }
-        p.closeSubpath()
-        return p
     }
 }

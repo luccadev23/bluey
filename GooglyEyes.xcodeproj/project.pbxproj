@@ -15,6 +15,7 @@
 		6C5FF10BDE711139D00DB85A /* Fredoka.ttf in Resources */ = {isa = PBXBuildFile; fileRef = D0EEE8F996B2F95804C1ECF8 /* Fredoka.ttf */; };
 		6E03A7EBF9AAFFE4AC87ADE4 /* GooglyLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F71F206238433A6F710528B /* GooglyLink.swift */; };
 		6F0C91F5B7E911464464DB96 /* Palette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A31DC33ABF7869BDE4E0F6C /* Palette.swift */; };
+		C7D8E9F0A1B2C3D4E5F60718 /* FaceLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E9F0A1B2C3D4E5F6071829 /* FaceLayout.swift */; };
 		6F0FE87629E2A7A20676322C /* ChunkRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7ED2232FD362786D7A5D38B8 /* ChunkRecorder.swift */; };
 		6FBD9F2B49D3FD5A78CC4EF1 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83073BF3A1F734ADC97138DF /* SessionStore.swift */; };
 		772A196648CCCC476A2E36F7 /* OFL-Fredoka.txt in Resources */ = {isa = PBXBuildFile; fileRef = 020C853B32D37028CE040148 /* OFL-Fredoka.txt */; };
@@ -32,6 +33,7 @@
 		72E5511F0BBEF42D2FEB4195 /* LocalSpeechRecognition.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACE36BE12271DCF6480B74D9 /* LocalSpeechRecognition.swift */; };
 		513859432964FC6EBB994E1A /* SpeechSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA43F3C9252D98D792FC2E67 /* SpeechSession.swift */; };
 		E86AAA6E520A55378AD69CBB /* SessionModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73F8861D86741DBA2E31C3D /* SessionModels.swift */; };
+		F0A1B2C3D4E5F60718293A41 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E9F0A1B2C3D4E5F607182930 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +46,7 @@
 		2CD953582717D49F21FCD734 /* LiveVoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveVoice.swift; sourceTree = "<group>"; };
 		35F3C44C342D6E869E6E3B4E /* BlobShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlobShape.swift; sourceTree = "<group>"; };
 		4A31DC33ABF7869BDE4E0F6C /* Palette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Palette.swift; sourceTree = "<group>"; };
+		D8E9F0A1B2C3D4E5F6071829 /* FaceLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaceLayout.swift; sourceTree = "<group>"; };
 		4F71F206238433A6F710528B /* GooglyLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GooglyLink.swift; sourceTree = "<group>"; };
 		65620B4F67CBB8E8821EBAC8 /* SoundButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundButton.swift; sourceTree = "<group>"; };
 		7A762C0174AFF849BAD1A700 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
@@ -61,6 +64,7 @@
 		ACE36BE12271DCF6480B74D9 /* LocalSpeechRecognition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSpeechRecognition.swift; sourceTree = "<group>"; };
 		AA43F3C9252D98D792FC2E67 /* SpeechSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechSession.swift; sourceTree = "<group>"; };
 		B73F8861D86741DBA2E31C3D /* SessionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionModels.swift; sourceTree = "<group>"; };
+		E9F0A1B2C3D4E5F607182930 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = iOS/Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -82,6 +86,7 @@
 			children = (
 				E8E2F33C9E110392983FDDDF /* Shared */,
 				8F41397BC1AEAB53CDE84BB3 /* Sources */,
+				E9F0A1B2C3D4E5F607182930 /* Assets.xcassets */,
 				554494C1002555E490E37EB6 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -124,6 +129,7 @@
 				4F71F206238433A6F710528B /* GooglyLink.swift */,
 				B1C2D3E4F5A60718293A4B5D /* VoiceProvider.swift */,
 				4A31DC33ABF7869BDE4E0F6C /* Palette.swift */,
+				D8E9F0A1B2C3D4E5F6071829 /* FaceLayout.swift */,
 				2F574059BA9C302B222352AA /* Fonts */,
 			);
 			path = Shared;
@@ -193,6 +199,7 @@
 				FC47A19572BFD9F2386A85D3 /* IBMPlexSans.ttf in Resources */,
 				772A196648CCCC476A2E36F7 /* OFL-Fredoka.txt in Resources */,
 				0E02B38E4A5A909A93BA31C5 /* OFL-IBMPlex.txt in Resources */,
+				F0A1B2C3D4E5F60718293A41 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -220,6 +227,7 @@
 				C763037B3F88C28F89EB61F0 /* MacLink.swift in Sources */,
 				68F797C6A1D3EC7A83674C2A /* PairingView.swift in Sources */,
 				6F0C91F5B7E911464464DB96 /* Palette.swift in Sources */,
+				C7D8E9F0A1B2C3D4E5F60718 /* FaceLayout.swift in Sources */,
 				6FBD9F2B49D3FD5A78CC4EF1 /* SessionStore.swift in Sources */,
 				FF7676A8F229F874417F4451 /* SoundButton.swift in Sources */,
 			);
@@ -366,12 +374,13 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.luccabonim.bluey.phone;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				PRODUCT_NAME = Bluey;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -393,12 +402,13 @@
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.luccabonim.bluey.phone;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				PRODUCT_NAME = Bluey;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
